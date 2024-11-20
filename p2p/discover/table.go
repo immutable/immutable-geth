@@ -58,7 +58,8 @@ const (
 	copyNodesInterval = 30 * time.Second
 	seedMinTableTime  = 5 * time.Minute
 	seedCount         = 30
-	seedMaxAge        = 5 * 24 * time.Hour
+	// CHANGE(immutable): Reduce seed max age from 120hrs
+	seedMaxAge = 1 * time.Second
 )
 
 // Table is the 'node table', a Kademlia-like index of neighbor nodes. The table keeps
@@ -315,15 +316,8 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	// Run self lookup to discover new neighbor nodes.
 	tab.net.lookupSelf()
 
-	// The Kademlia paper specifies that the bucket refresh should
-	// perform a lookup in the least recently used bucket. We cannot
-	// adhere to this because the findnode target is a 512bit value
-	// (not hash-sized) and it is not easily possible to generate a
-	// sha3 preimage that falls into a chosen bucket.
-	// We perform a few lookups with a random target instead.
-	for i := 0; i < 3; i++ {
-		tab.net.lookupRandom()
-	}
+	// CHANGE(immutable): Remove the random lookup.
+	// Self lookup is sufficient to discover requisite nodes.
 }
 
 func (tab *Table) loadSeedNodes() {

@@ -242,9 +242,9 @@ func createAndStartServer(t *testing.T, conf *httpConfig, ws bool, wsConf *wsCon
 		timeouts = &rpc.DefaultHTTPTimeouts
 	}
 	srv := newHTTPServer(testlog.Logger(t, log.LvlDebug), *timeouts)
-	assert.NoError(t, srv.enableRPC(apis(), *conf))
+	assert.NoError(t, srv.enableRPC(nil, apis(), *conf))
 	if ws {
-		assert.NoError(t, srv.enableWS(nil, *wsConf))
+		assert.NoError(t, srv.enableWS(nil, nil, *wsConf))
 	}
 	assert.NoError(t, srv.setListenAddr("localhost", 0))
 	assert.NoError(t, srv.start())

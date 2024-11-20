@@ -370,7 +370,13 @@ func (t *UDPv4) RequestENR(n *enode.Node) (*enode.Node, error) {
 		return n, nil // response record is older
 	}
 	if err := netutil.CheckRelayIP(addr.IP, respN.IP()); err != nil {
-		return nil, fmt.Errorf("invalid IP in response record: %v", err)
+		// CHANGE(immutable): Log both IPs
+		return nil, fmt.Errorf(
+			"invalid IP in response record: %v. sender (%s), addr (%s)",
+			err,
+			addr.IP.String(),
+			respN.IP().String(),
+		)
 	}
 	return respN, nil
 }

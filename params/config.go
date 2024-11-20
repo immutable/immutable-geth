@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/settings"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params/forks"
 )
@@ -348,6 +349,9 @@ type ChainConfig struct {
 
 	// Fork scheduling was switched from blocks to timestamps here
 
+	// CHANGE(immutable): Add PrevrandaoTime
+	PrevrandaoTime *uint64 `json:"prevrandaoTime,omitempty"` // Prevrandao switch time (nil = no fork, 0 = already on prevrandao)
+
 	ShanghaiTime *uint64 `json:"shanghaiTime,omitempty"` // Shanghai switch time (nil = no fork, 0 = already on shanghai)
 	CancunTime   *uint64 `json:"cancunTime,omitempty"`   // Cancun switch time (nil = no fork, 0 = already on cancun)
 	PragueTime   *uint64 `json:"pragueTime,omitempty"`   // Prague switch time (nil = no fork, 0 = already on prague)
@@ -365,6 +369,10 @@ type ChainConfig struct {
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
+
+	// CHANGE(immutable): Add new chain config paramaters
+	// IsReorgBlocked will cause the node to treat chain reorg scenarios as an error state
+	IsReorgBlocked bool `json:"isReorgBlocked,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -396,6 +404,9 @@ func (c *ChainConfig) Description() string {
 		network = "unknown"
 	}
 	banner += fmt.Sprintf("Chain ID:  %v (%s)\n", c.ChainID, network)
+
+	// CHANGE(immutable): Add fork invariants info to the startup banner
+	banner += fmt.Sprintf("Reorg Invariants Enabled: %t\n", c.IsReorgBlocked)
 	switch {
 	case c.Ethash != nil:
 		if c.TerminalTotalDifficulty == nil {
@@ -448,7 +459,8 @@ func (c *ChainConfig) Description() string {
 
 	// Add a special section for the merge as it's non-obvious
 	if c.TerminalTotalDifficulty == nil {
-		banner += "The Merge is not yet available for this network!\n"
+		// CHANGE(immutable): Disable misleading logs. Clique uses difficulty header field for consensus. Immutable zkEVM does not use TerminalTotalDifficulty
+		//banner += "The Merge is not yet available for this network!\n"
 		banner += " - Hard-fork specification: https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/paris.md\n"
 	} else {
 		banner += "Merge configured:\n"
@@ -463,6 +475,10 @@ func (c *ChainConfig) Description() string {
 
 	// Create a list of forks post-merge
 	banner += "Post-Merge hard forks (timestamp based):\n"
+	// CHANGE(immutable): Add section for Prevrandao fork
+	if c.PrevrandaoTime != nil {
+		banner += fmt.Sprintf(" - Prevrandao:                  @%-10v\n", *c.PrevrandaoTime)
+	}
 	if c.ShanghaiTime != nil {
 		banner += fmt.Sprintf(" - Shanghai:                    @%-10v (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/shanghai.md)\n", *c.ShanghaiTime)
 	}
@@ -629,6 +645,8 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "arrowGlacierBlock", block: c.ArrowGlacierBlock, optional: true},
 		{name: "grayGlacierBlock", block: c.GrayGlacierBlock, optional: true},
 		{name: "mergeNetsplitBlock", block: c.MergeNetsplitBlock, optional: true},
+		// CHANGE(immutable): Add prevrandao fork
+		{name: "prevrandaoTime", timestamp: c.PrevrandaoTime, optional: true},
 		{name: "shanghaiTime", timestamp: c.ShanghaiTime},
 		{name: "cancunTime", timestamp: c.CancunTime, optional: true},
 		{name: "pragueTime", timestamp: c.PragueTime, optional: true},
@@ -744,7 +762,11 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 
 // BaseFeeChangeDenominator bounds the amount the base fee can change between blocks.
 func (c *ChainConfig) BaseFeeChangeDenominator() uint64 {
-	return DefaultBaseFeeChangeDenominator
+	// CHANGE(immutable): Provide base fee change denominator specific to Immutable zkEVM
+	if c.IsImmutableZKEVM() {
+		return settings.BaseFeeChangeDenominator
+	}
+	return defaultBaseFeeChangeDenominator
 }
 
 // ElasticityMultiplier bounds the maximum gas limit an EIP-1559 block may have.

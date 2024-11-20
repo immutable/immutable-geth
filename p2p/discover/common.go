@@ -65,7 +65,8 @@ func (cfg Config) withDefaults() Config {
 		cfg.PingInterval = 10 * time.Second
 	}
 	if cfg.RefreshInterval == 0 {
-		cfg.RefreshInterval = 30 * time.Minute
+		// CHANGE(immutable): Reduce refresh interval.
+		cfg.RefreshInterval = 20 * time.Second
 	}
 
 	// Debug/test settings:

@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 )
 
@@ -37,8 +38,9 @@ type ChainContext interface {
 	GetHeader(common.Hash, uint64) *types.Header
 }
 
+// CHANGE(immutable): Pass in ChainConfig to NewEVMBlockContext to allow determination that network is Immutable zkEVM
 // NewEVMBlockContext creates a new context for use in the EVM.
-func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address) vm.BlockContext {
+func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address, params *params.ChainConfig) vm.BlockContext {
 	var (
 		beneficiary common.Address
 		baseFee     *big.Int
@@ -58,7 +60,9 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 	if header.ExcessBlobGas != nil {
 		blobBaseFee = eip4844.CalcBlobFee(*header.ExcessBlobGas)
 	}
-	if header.Difficulty.Cmp(common.Big0) == 0 {
+	// CHANGE(immutable): Enable EIP-4399 based on prevrandao fork
+	if params.IsImmutableZKEVMPrevrandao(header.Time) ||
+		header.Difficulty.Cmp(common.Big0) == 0 {
 		random = &header.MixDigest
 	}
 	return vm.BlockContext{

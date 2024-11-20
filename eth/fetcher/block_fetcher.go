@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/eth/fetcher/long"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -40,13 +41,18 @@ const (
 )
 
 const (
-	maxUncleDist = 7   // Maximum allowed backward distance from the chain head
-	maxQueueDist = 32  // Maximum allowed distance from the chain head to queue
+	// CHANGE(immutable): Set maxUncleDist to 0 to prevent chains from acceptable blocks older
+	// than the current head, resulting in reorgs
+	maxUncleDist = 0   // Maximum allowed backward distance from the chain head
 	hashLimit    = 256 // Maximum number of unique blocks or headers a peer may have announced
-	blockLimit   = 64  // Maximum number of unique blocks a peer may have delivered
+	// CHANGE(immutable): Set blockLimit to 256 as all blocks are coming from a handful of peers
+	blockLimit = 256 // Maximum number of unique blocks a peer may have delivered
 )
 
 var (
+	// CHANGE(immutable): Set maxQueueDist to a large number if env var is set
+	maxQueueDist = long.BlockFetchDistance() // Maximum allowed distance from the chain head to queue
+
 	blockAnnounceInMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/announces/in", nil)
 	blockAnnounceOutTimer  = metrics.NewRegisteredTimer("eth/fetcher/block/announces/out", nil)
 	blockAnnounceDropMeter = metrics.NewRegisteredMeter("eth/fetcher/block/announces/drop", nil)
@@ -125,7 +131,9 @@ type bodyFilterTask struct {
 	peer         string                 // The source peer of block bodies
 	transactions [][]*types.Transaction // Collection of transactions per block bodies
 	uncles       [][]*types.Header      // Collection of uncles per block bodies
-	time         time.Time              // Arrival time of the blocks' contents
+	// CHANGE(immutable): Block Fetcher tasks can have withdrawals
+	withdrawals [][]*types.Withdrawal // Collection of withdrawals per block bodies
+	time        time.Time             // Arrival time of the blocks' contents
 }
 
 // blockOrHeaderInject represents a schedules import operation.
@@ -302,7 +310,7 @@ func (f *BlockFetcher) FilterHeaders(peer string, headers []*types.Header, time 
 
 // FilterBodies extracts all the block bodies that were explicitly requested by
 // the fetcher, returning those that should be handled differently.
-func (f *BlockFetcher) FilterBodies(peer string, transactions [][]*types.Transaction, uncles [][]*types.Header, time time.Time) ([][]*types.Transaction, [][]*types.Header) {
+func (f *BlockFetcher) FilterBodies(peer string, transactions [][]*types.Transaction, uncles [][]*types.Header, withdrawals [][]*types.Withdrawal, time time.Time) ([][]*types.Transaction, [][]*types.Header, [][]*types.Withdrawal) {
 	log.Trace("Filtering bodies", "peer", peer, "txs", len(transactions), "uncles", len(uncles))
 
 	// Send the filter channel to the fetcher
@@ -311,20 +319,20 @@ func (f *BlockFetcher) FilterBodies(peer string, transactions [][]*types.Transac
 	select {
 	case f.bodyFilter <- filter:
 	case <-f.quit:
-		return nil, nil
+		return nil, nil, nil
 	}
 	// Request the filtering of the body list
 	select {
-	case filter <- &bodyFilterTask{peer: peer, transactions: transactions, uncles: uncles, time: time}:
+	case filter <- &bodyFilterTask{peer: peer, transactions: transactions, uncles: uncles, withdrawals: withdrawals, time: time}:
 	case <-f.quit:
-		return nil, nil
+		return nil, nil, nil
 	}
 	// Retrieve the bodies remaining after filtering
 	select {
 	case task := <-filter:
-		return task.transactions, task.uncles
+		return task.transactions, task.uncles, task.withdrawals
 	case <-f.quit:
-		return nil, nil
+		return nil, nil, nil
 	}
 }
 
@@ -396,7 +404,7 @@ func (f *BlockFetcher) loop() {
 				break
 			}
 			// If we have a valid block number, check that it's potentially useful
-			if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
+			if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > int64(maxQueueDist) {
 				log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
 				blockAnnounceDropMeter.Mark(1)
 				break
@@ -541,8 +549,9 @@ func (f *BlockFetcher) loop() {
 					case res := <-resCh:
 						res.Done <- nil
 						// Ignoring withdrawals here, since the block fetcher is not used post-merge.
-						txs, uncles, _ := res.Res.(*eth.BlockBodiesResponse).Unpack()
-						f.FilterBodies(peer, txs, uncles, time.Now())
+						// CHANGE(immutable): We continue to use block fetcher in a pre-merge network with withdrawals
+						txs, uncles, withdrawals := res.Res.(*eth.BlockBodiesResponse).Unpack()
+						f.FilterBodies(peer, txs, uncles, withdrawals, time.Now())
 
 					case <-timeout.C:
 						// The peer didn't respond in time. The request
@@ -660,12 +669,16 @@ func (f *BlockFetcher) loop() {
 			blocks := []*types.Block{}
 			// abort early if there's nothing explicitly requested
 			if len(f.completing) > 0 {
-				for i := 0; i < len(task.transactions) && i < len(task.uncles); i++ {
+				// CHANGE(immutable): `i` should also consider the length of withdrawals. However, transactions, uncles,
+				// and withdrawals should be the same length given that they are set in BlockBodiesResponse.Unpack().
+				// By adding it here, we enforce this assumption
+				for i := 0; i < len(task.transactions) && i < len(task.uncles) && i < len(task.withdrawals); i++ {
 					// Match up a body to any possible completion request
 					var (
-						matched   = false
-						uncleHash common.Hash // calculated lazily and reused
-						txnHash   common.Hash // calculated lazily and reused
+						matched         = false
+						uncleHash       common.Hash // calculated lazily and reused
+						txnHash         common.Hash // calculated lazily and reused
+						withdrawalsHash common.Hash // calculated lazily and reused
 					)
 					for hash, announce := range f.completing {
 						if f.queued[hash] != nil || announce.origin != task.peer {
@@ -683,10 +696,31 @@ func (f *BlockFetcher) loop() {
 						if txnHash != announce.header.TxHash {
 							continue
 						}
+
+						// CHANGE(immutable): Just as the transactions trie hash is verified against the transactions,
+						// the same must be done with withdrawals for any given block as we cannot assume that the header hash
+						// is correctly derived from the body
+						// If the header withdrawals hash is nil, the withdrawals must be nil
+						if announce.header.WithdrawalsHash == nil {
+							if task.withdrawals[i] != nil {
+								log.Warn("Discarded block due to mismatched withdrawalsHash, expected nil")
+								continue
+							}
+						} else {
+							// If the withdrawals hash is not nil, the derived hash should match
+							if withdrawalsHash == (common.Hash{}) {
+								withdrawalsHash = types.DeriveSha(types.Withdrawals(task.withdrawals[i]), trie.NewStackTrie(nil))
+							}
+							if withdrawalsHash != *announce.header.WithdrawalsHash {
+								log.Warn("Discarded block due to mismatched withdrawalsHash", "expected", *announce.header.WithdrawalsHash, "received", withdrawalsHash)
+								continue
+							}
+						}
+
 						// Mark the body matched, reassemble if still unknown
 						matched = true
 						if f.getBlock(hash) == nil {
-							block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])
+							block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i]).WithWithdrawals(task.withdrawals[i])
 							block.ReceivedAt = task.time
 							blocks = append(blocks, block)
 						} else {
@@ -696,6 +730,7 @@ func (f *BlockFetcher) loop() {
 					if matched {
 						task.transactions = append(task.transactions[:i], task.transactions[i+1:]...)
 						task.uncles = append(task.uncles[:i], task.uncles[i+1:]...)
+						task.withdrawals = append(task.withdrawals[:i], task.withdrawals[i+1:]...)
 						i--
 						continue
 					}
@@ -770,14 +805,16 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	// Ensure the peer isn't DOSing us
 	count := f.queues[peer] + 1
 	if count > blockLimit {
-		log.Debug("Discarded delivered header or block, exceeded allowance", "peer", peer, "number", number, "hash", hash, "limit", blockLimit)
+		// CHANGE(immutable): Changed to warning log as we only expect blocks from trusted peers that should be giving us valid blocks
+		log.Warn("Discarded delivered header or block, exceeded allowance", "peer", peer, "number", number, "hash", hash, "limit", blockLimit)
 		blockBroadcastDOSMeter.Mark(1)
 		f.forgetHash(hash)
 		return
 	}
 	// Discard any past or too distant blocks
-	if dist := int64(number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
-		log.Debug("Discarded delivered header or block, too far away", "peer", peer, "number", number, "hash", hash, "distance", dist)
+	if dist := int64(number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > int64(maxQueueDist) {
+		// CHANGE(immutable): Changed to warning log as we only expect blocks from trusted peers that should be giving us valid blocks
+		log.Warn("Discarded delivered header or block, too far away", "peer", peer, "number", number, "hash", hash, "distance", dist)
 		blockBroadcastDropMeter.Mark(1)
 		f.forgetHash(hash)
 		return
@@ -850,6 +887,12 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			log.Debug("Unknown parent of propagated block", "peer", peer, "number", block.Number(), "hash", hash, "parent", block.ParentHash())
 			return
 		}
+
+		// CHANGE(immutable): Ensure empty withdrawals after cancun before broadcast
+		if block.Header().EmptyWithdrawalsHash() {
+			block = block.WithWithdrawals(make([]*types.Withdrawal, 0))
+		}
+
 		// Quickly validate the header and propagate the block if it passes
 		switch err := f.verifyHeader(block.Header()); err {
 		case nil:

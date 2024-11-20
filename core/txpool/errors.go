@@ -55,6 +55,10 @@ var (
 	// one. Future transactions should only be able to replace other future transactions.
 	ErrFutureReplacePending = errors.New("future transaction tries to replace pending")
 
+	// ErrTxIsUnauthorized indicates that the sender is not authorized to submit transaction
+	// CHANGE(immutable): ErrTxIsUnauthorized error for transactions that are blocked/filtered out
+	ErrTxIsUnauthorized = errors.New("transaction is not allowed, sender is not authorized to perform transaction")
+
 	// ErrAlreadyReserved is returned if the sender address has a pending transaction
 	// in a different subpool. For example, this error is returned in response to any
 	// input transaction of non-blob type when a blob transaction from this sender

@@ -1,0 +1,7 @@
+[
+	{
+		"type": "constructor",
+		"inputs": [{ "name": "recipient", "type": "address", "internalType": "address" }],
+		"stateMutability": "payable"
+	}
+]

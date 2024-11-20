@@ -880,7 +880,7 @@ func TestHashMemoryExhaustionAttack(t *testing.T) {
 		}
 		tester.fetcher.Notify("attacker", attack[i], 1 /* don't distance drop */, time.Now(), attackerHeaderFetcher, attackerBodyFetcher)
 	}
-	if count := announces.Load(); count != hashLimit+maxQueueDist {
+	if count := announces.Load(); count != hashLimit+int32(maxQueueDist) {
 		t.Fatalf("queued announce count mismatch: have %d, want %d", count, hashLimit+maxQueueDist)
 	}
 	// Wait for fetches to complete
@@ -933,7 +933,7 @@ func TestBlockMemoryExhaustionAttack(t *testing.T) {
 		tester.fetcher.Enqueue("valid", blocks[hashes[len(hashes)-3-i]])
 	}
 	time.Sleep(100 * time.Millisecond)
-	if queued := enqueued.Load(); queued != blockLimit+maxQueueDist-1 {
+	if queued := enqueued.Load(); queued != blockLimit+int32(maxQueueDist)-1 {
 		t.Fatalf("queued block count mismatch: have %d, want %d", queued, blockLimit+maxQueueDist-1)
 	}
 	// Insert the missing piece (and sanity check the import)

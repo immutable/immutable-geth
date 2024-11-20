@@ -58,6 +58,8 @@ func (t *ShutdownTracker) MarkStartup() {
 				"age", common.PrettyAge(t))
 		}
 	}
+	// CHANGE(immutable): log shutdown tracker steps
+	log.Info("Shutdown tracker started marker")
 }
 
 // Start runs an event loop that updates the current marker's timestamp every 5 minutes.
@@ -69,6 +71,8 @@ func (t *ShutdownTracker) Start() {
 			select {
 			case <-ticker.C:
 				rawdb.UpdateUncleanShutdownMarker(t.db)
+				// CHANGE(immutable): log shutdown tracker steps
+				log.Info("Shutdown tracker updated marker")
 			case <-t.stopCh:
 				return
 			}
@@ -82,4 +86,6 @@ func (t *ShutdownTracker) Stop() {
 	t.stopCh <- struct{}{}
 	// Clear last marker.
 	rawdb.PopUncleanShutdownMarker(t.db)
+	// CHANGE(immutable): log shutdown tracker steps
+	log.Info("Shutdown tracker stopped")
 }

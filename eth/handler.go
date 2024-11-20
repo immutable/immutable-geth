@@ -52,7 +52,8 @@ const (
 	// txMaxBroadcastSize is the max size of a transaction that will be broadcasted.
 	// All transactions with a higher size will be announced and need to be fetched
 	// by the peer.
-	txMaxBroadcastSize = 4096
+	// CHANGE(immutable): unused
+	txMaxBroadcastSize = 4096 //nolint:unused
 )
 
 var syncChallengeTimeout = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
@@ -93,6 +94,10 @@ type handlerConfig struct {
 	BloomCache     uint64                 // Megabytes to alloc for snap sync bloom
 	EventMux       *event.TypeMux         // Legacy event mux, deprecate for `feed`
 	RequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
+	// CHANGE(immutable): gossip configuration
+	GossipDefault bool // Whether to use default gossip configuration
+	// CHANGE(immutable): disable txpool gossip configuration
+	DisableTxPoolGossip bool
 }
 
 type handler struct {
@@ -128,6 +133,10 @@ type handler struct {
 
 	handlerStartCh chan struct{}
 	handlerDoneCh  chan struct{}
+	// CHANGE(immutable): gossip configuration
+	gossipDefault bool
+	// CHANGE(immutable): disable txpool gossip configuration
+	disableTxPoolGossip bool
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -149,6 +158,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		quitSync:       make(chan struct{}),
 		handlerDoneCh:  make(chan struct{}),
 		handlerStartCh: make(chan struct{}),
+		// CHANGE(immutable): gossip configuration
+		gossipDefault: config.GossipDefault,
+		// CHANGE(immutable): disable txpool gossip configuration
+		disableTxPoolGossip: config.DisableTxPoolGossip,
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
@@ -368,7 +381,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			return p2p.DiscTooManyPeers
 		}
 	}
-	peer.Log().Debug("Ethereum peer connected", "name", peer.Name())
+	// CHANGE(immutable): log fullname
+	peer.Log().Debug("Ethereum peer connected", "name", peer.Fullname())
 
 	// Register the peer locally
 	if err := h.peers.registerPeer(peer, snap); err != nil {
@@ -439,7 +453,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 				peer.Log().Debug("Peer required block verified", "number", number, "hash", hash)
 				res.Done <- nil
 			case <-timeout.C:
-				peer.Log().Warn("Required block challenge timed out, dropping", "addr", peer.RemoteAddr(), "type", peer.Name())
+				// CHANGE(immutable): log fullname
+				peer.Log().Warn("Required block challenge timed out, dropping", "addr", peer.RemoteAddr(), "type", peer.Fullname())
 				h.removePeer(peer.ID())
 			}
 		}(number, hash, req)
@@ -597,9 +612,11 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 }
 
 // BroadcastTransactions will propagate a batch of transactions
-// - To a square root of all peers for non-blob transactions
-// - And, separately, as announcements to all peers which are not known to
-// already have the given transaction.
+// CHANGE(immutable):
+// - Add conditional logic to send transactions to all peers or the geth default which is a subset of them
+// - When gossipping to all peers, txs will be gossiped regardless of whether the node has received the transaction before
+// - No announcements should be sent, as all peers should receive the full tx
+// - When gossiping to a subset the gossiping will use geths default logic, where a subset of peers will receive the txs
 func (h *handler) BroadcastTransactions(txs types.Transactions) {
 	var (
 		blobTxs  int // Number of blob transactions to announce only
@@ -613,26 +630,43 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		txset = make(map[*ethPeer][]common.Hash) // Set peer->hash to transfer directly
 		annos = make(map[*ethPeer][]common.Hash) // Set peer->hash to announce
 	)
-	// Broadcast transactions to a batch of peers not knowing about it
+	// CHANGE(immutable): Broadcast transactions to all peers, regardless of whether
+	// they are known to have previously received it. This is to prevent loss of transactions
+	// in smaller networks.
 	for _, tx := range txs {
-		peers := h.peers.peersWithoutTransaction(tx.Hash())
-
-		var numDirect int
 		switch {
 		case tx.Type() == types.BlobTxType:
 			blobTxs++
 		case tx.Size() > txMaxBroadcastSize:
 			largeTxs++
-		default:
-			numDirect = int(math.Sqrt(float64(len(peers))))
 		}
-		// Send the tx unconditionally to a subset of our peers
-		for _, peer := range peers[:numDirect] {
-			txset[peer] = append(txset[peer], tx.Hash())
-		}
-		// For the remaining peers, send announcement only
-		for _, peer := range peers[numDirect:] {
-			annos[peer] = append(annos[peer], tx.Hash())
+
+		// CHANGE(immutable): conditionally send to a subset of peers (default), otherwise send to all peers
+		if h.gossipDefault {
+			// CHANGE(immutable): Send the txs to a subset of peers. This is the default behaviour for geth.
+			peers := h.peers.peersWithoutTransaction(tx.Hash())
+			var numDirect int
+			if tx.Size() <= txMaxBroadcastSize {
+				numDirect = int(math.Sqrt(float64(len(peers))))
+			}
+
+			// Send the tx unconditionally to a subset of our peers
+			for _, peer := range peers[:numDirect] {
+				txset[peer] = append(txset[peer], tx.Hash())
+			}
+
+			// For the remaining peers, send announcement only
+			for _, peer := range peers[numDirect:] {
+				annos[peer] = append(annos[peer], tx.Hash())
+			}
+		} else {
+			// CHANGE(immutable): Send the tx unconditionally to all our peers, rather than a subset.
+			// Sending transactions to a subset of peers is only applicable for large scale networks.
+			// All peers will receive the full transaction payload instead of an announcement.
+			peers := h.peers.allPeers()
+			for _, peer := range peers[:] {
+				txset[peer] = append(txset[peer], tx.Hash())
+			}
 		}
 	}
 	for peer, hashes := range txset {
@@ -641,6 +675,8 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		peer.AsyncSendTransactions(hashes)
 	}
 	for peer, hashes := range annos {
+		// CHANGE(immutable): Add warning logs for announcements as we do not expect them to occur
+		log.Warn("Sending announcements unexpectedly", "announced hashes", len(annos))
 		annPeers++
 		annCount += len(hashes)
 		peer.AsyncSendPooledTransactionHashes(hashes)

@@ -33,8 +33,23 @@ import (
 // packets that are sent as replies or broadcasts.
 type ethHandler handler
 
+// CHANGE(immutable): add nill pool for disabling tx gossping
+// NilPool implements the TxPool interface but does nothing. This is used to disable txpool gossiping
+type NilPool struct{}
+
+// CHANGE(immutable): add nill pool for disabling tx gossping
+func (n NilPool) Get(hash common.Hash) *types.Transaction {
+	return nil
+}
+
 func (h *ethHandler) Chain() *core.BlockChain { return h.chain }
-func (h *ethHandler) TxPool() eth.TxPool      { return h.txpool }
+func (h *ethHandler) TxPool() eth.TxPool {
+	// CHANGE(immutable): disable tx pool gossiping
+	if h.disableTxPoolGossip {
+		return NilPool{}
+	}
+	return h.txpool
+}
 
 // RunPeer is invoked when a peer joins on the `eth` protocol.
 func (h *ethHandler) RunPeer(peer *eth.Peer, hand eth.Handler) error {
@@ -52,6 +67,10 @@ func (h *ethHandler) PeerInfo(id enode.ID) interface{} {
 // AcceptTxs retrieves whether transaction processing is enabled on the node
 // or if inbound transactions should simply be dropped.
 func (h *ethHandler) AcceptTxs() bool {
+	// CHANGE(immutable): disable tx pool gossiping
+	if h.disableTxPoolGossip {
+		return false
+	}
 	return h.synced.Load()
 }
 

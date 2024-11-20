@@ -19,6 +19,7 @@ package filters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,6 +27,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
+
+// CHANGE(immutable): Add a max filter range for logs queried using getLogs
+const maxFilterBlockRange = 5000
 
 // Filter can be used to retrieve and filter logs.
 type Filter struct {
@@ -155,6 +159,12 @@ func (f *Filter) Logs(ctx context.Context) ([]*types.Log, error) {
 	}
 	if f.end, err = resolveSpecial(f.end); err != nil {
 		return nil, err
+	}
+
+	// CHANGE(immutable): Add a max filter block range
+	// TODO: Change this to a CLI flag
+	if f.end-f.begin > maxFilterBlockRange {
+		return nil, fmt.Errorf("exceeded maximum block range: %d", maxFilterBlockRange)
 	}
 
 	logChan, errChan := f.rangeLogsAsync(ctx)

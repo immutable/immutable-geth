@@ -1,0 +1,79 @@
+[Eth]
+NetworkId = 15003
+SyncMode = "full"
+EthDiscoveryURLs = []
+SnapDiscoveryURLs = []
+NoPruning = true
+NoPrefetch = false
+TxLookupLimit = 2350000
+TransactionHistory = 2350000
+StateScheme = "hash"
+DatabaseCache = 512
+DatabaseFreezer = ""
+TrieCleanCache = 256
+TrieDirtyCache = 256
+TrieTimeout = 3600000000000
+SnapshotCache = 0
+Preimages = false
+FilterLogCacheSize = 32
+EnablePreimageRecording = false
+RPCGasCap = 50000000
+RPCEVMTimeout = 5000000000
+RPCTxFeeCap = 0e+00
+
+[Eth.Miner]
+GasFloor = 0
+GasCeil = 30000000
+GasPrice = 10000000000
+Recommit = 123
+NewPayloadTimeout = 2000000000
+
+[Eth.TxPool]
+Locals = []
+NoLocals = true
+Journal = "transactions.rlp"
+Rejournal = 3600000000000
+PriceLimit = 10000000000
+PriceBump = 10
+AccountSlots = 16
+GlobalSlots = 5120
+AccountQueue = 64
+GlobalQueue = 1024
+Lifetime = 3600000000000
+
+[Eth.BlobPool]
+Datadir = "blobpool"
+Datacap = 0
+PriceBump = 100
+
+[Eth.GPO]
+Blocks = 120
+Percentile = 60
+MaxHeaderHistory = 1024
+MaxBlockHistory = 1024
+MaxPrice = 500000000000
+IgnorePrice = 2
+
+[Node]
+DataDir = ""
+IPCPath = "geth.ipc"
+HTTPHost = ""
+HTTPModules = []
+WSHost = ""
+WSModules = []
+
+[Node.P2P]
+MaxPeers = 100
+NoDiscovery = false
+BootstrapNodes = ["enode://26ed2b67b49284e3aca7a04fae065681bf28a7a1c7958e5039472e213cc1ae0b743d987c8a9832e17b42f423e7800ce74d0ad23f477c5fa1a1adb51808d67aa4@127.0.0.1:30300"]
+StaticNodes = []
+TrustedNodes = []
+ListenAddr = ""
+DiscAddr = ""
+EnableMsgEvents = false
+
+[Node.HTTPTimeouts]
+ReadTimeout = 0
+ReadHeaderTimeout = 0
+WriteTimeout = 0
+IdleTimeout = 0

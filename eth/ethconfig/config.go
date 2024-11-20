@@ -159,6 +159,19 @@ type Config struct {
 
 	// OverrideVerkle (TODO: remove after the fork)
 	OverrideVerkle *uint64 `toml:",omitempty"`
+
+	// CHANGE(immutable): Add Prevrandao and Shanghai overrides.
+	OverridePrevrandao *uint64 `toml:",omitempty"`
+	OverrideShanghai   *uint64 `toml:",omitempty"`
+
+	// CHANGE(immutable): Add gossip configuration.
+	GossipDefault bool `toml:",omitempty"`
+
+	// CHANGE(immutable): Disable txpool gossip configuration.
+	DisableTxPoolGossip bool `toml:",omitempty"`
+
+	// CHANGE(immutable): Proxy to Immutable RPC configuration.
+	RPCProxyURL string `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain config.

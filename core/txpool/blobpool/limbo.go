@@ -116,9 +116,12 @@ func (l *limbo) finalize(final *types.Header) {
 	// Just in case there's no final block yet (network not yet merged, weird
 	// restart, sethead, etc), fail gracefully.
 	if final == nil {
-		log.Error("Nil finalized block cannot evict old blobs")
+		// CHANGE(immutable): Decrease log severity because our BAU involves nil final header.
+		log.Info("Nil finalized block cannot evict old blobs")
 		return
 	}
+	// CHANGE(immutable): Additional log line.
+	log.Warn("Evicting old blobs", "block", *final)
 	for block, ids := range l.groups {
 		if block > final.Number.Uint64() {
 			continue

@@ -315,19 +315,31 @@ func (p *TxPool) Add(txs []*types.Transaction, local bool, sync bool) []error {
 	//
 	// We also need to track how the transactions were split across the subpools,
 	// so we can piece back the returned errors into the original order.
+	//
+	// CHANGE(immutable): Adding a error to the subpool split to indicate the specifity of
+	// why this transaction is not included in any subpool
+	type SplitError struct {
+		index int
+		err   error
+	}
 	txsets := make([][]*types.Transaction, len(p.subpools))
-	splits := make([]int, len(txs))
+	splits := make([]SplitError, len(txs))
 
 	for i, tx := range txs {
-		// Mark this transaction belonging to no-subpool
-		splits[i] = -1
-
 		// Try to find a subpool that accepts the transaction
 		for j, subpool := range p.subpools {
-			if subpool.Filter(tx) {
+			err := subpool.FilterWithError(tx)
+			if err == nil {
 				txsets[j] = append(txsets[j], tx)
-				splits[i] = j
+				splits[i] = SplitError{index: j, err: nil}
 				break
+			} else if err == ErrTxIsUnauthorized {
+				// CHANGE(immutable): Subpool exists that handles this tx but it is blocked and/or unauthorized
+				splits[i] = SplitError{index: j, err: err}
+				break
+			} else {
+				// Mark this transaction belonging to no-subpool
+				splits[i] = SplitError{index: -1, err: err}
 			}
 		}
 	}
@@ -340,13 +352,13 @@ func (p *TxPool) Add(txs []*types.Transaction, local bool, sync bool) []error {
 	errs := make([]error, len(txs))
 	for i, split := range splits {
 		// If the transaction was rejected by all subpools, mark it unsupported
-		if split == -1 {
-			errs[i] = core.ErrTxTypeNotSupported
+		if split.err != nil {
+			errs[i] = split.err
 			continue
 		}
 		// Find which subpool handled it and pull in the corresponding error
-		errs[i] = errsets[split][0]
-		errsets[split] = errsets[split][1:]
+		errs[i] = errsets[split.index][0]
+		errsets[split.index] = errsets[split.index][1:]
 	}
 	return errs
 }

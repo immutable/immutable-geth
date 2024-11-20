@@ -73,6 +73,13 @@ var DefaultConfig = Config{
 		NAT:        nat.Any(),
 	},
 	DBEngine: "", // Use whatever exists, will default to Pebble if non-existent and supported
+
+	// CHANGE(immutable): Disable specific namespaces from the rpc server,
+	// By default they're enabled
+	DisableDebug:  false,
+	DisableAdmin:  false,
+	DisableEngine: false,
+	DisableTxPool: false,
 }
 
 // DefaultDataDir is the default data directory to use for the databases and other

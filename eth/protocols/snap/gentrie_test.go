@@ -19,8 +19,9 @@ package snap
 import (
 	"bytes"
 	"math/rand"
-	"slices"
 	"testing"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"

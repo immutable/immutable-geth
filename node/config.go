@@ -210,6 +210,16 @@ type Config struct {
 	// EnablePersonal enables the deprecated personal namespace.
 	EnablePersonal bool `toml:"-"`
 
+	// CHANGE(immutable): Disable specific namespaces from the rpc server,
+	// By default they're enabled
+	DisableDebug    bool `toml:"-"`
+	DisableAdmin    bool `toml:"-"`
+	DisableEngine   bool `toml:"-"`
+	DisableTxPool   bool `toml:"-"`
+	DisableClique   bool `toml:"-"`
+	DisableMiner    bool `toml:"-"`
+	DisablePersonal bool `toml:"-"`
+
 	DBEngine string `toml:",omitempty"`
 }
 

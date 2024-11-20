@@ -95,6 +95,10 @@ type SubPool interface {
 	// to this particular subpool.
 	Filter(tx *types.Transaction) bool
 
+	// FilterWithError is a selector used to decide whether a transaction whould be added
+	// to this particular subpool.
+	FilterWithError(tx *types.Transaction) error
+
 	// Init sets the base parameters of the subpool, allowing it to load any saved
 	// transactions from disk and also permitting internal maintenance routines to
 	// start up.

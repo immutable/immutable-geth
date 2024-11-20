@@ -53,13 +53,15 @@ var (
 // chain. Depending on the full flag, it creates either a full block chain or a
 // header only chain. The database and genesis specification for block generation
 // are also returned in case more test blocks are needed later.
+// CHANGE(immutable): Wraps newCanonicalWithGenesis to allow for customization
 func newCanonical(engine consensus.Engine, n int, full bool, scheme string) (ethdb.Database, *Genesis, *BlockChain, error) {
-	var (
-		genesis = &Genesis{
-			BaseFee: big.NewInt(params.InitialBaseFee),
-			Config:  params.AllEthashProtocolChanges,
-		}
-	)
+	genesis := &Genesis{
+		BaseFee: big.NewInt(params.InitialBaseFee),
+		Config:  params.AllEthashProtocolChanges,
+	}
+	return newCanonicalWithGenesis(engine, n, full, scheme, genesis)
+}
+func newCanonicalWithGenesis(engine consensus.Engine, n int, full bool, scheme string, genesis *Genesis) (ethdb.Database, *Genesis, *BlockChain, error) {
 	// Initialize a fresh chain with only a genesis block
 	blockchain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil)
 
@@ -83,7 +85,7 @@ func newGwei(n int64) *big.Int {
 	return new(big.Int).Mul(big.NewInt(n), big.NewInt(params.GWei))
 }
 
-// Test fork of length N starting from block i
+// Test fork of length N starting from block i. These will not trigger a reorg
 func testFork(t *testing.T, blockchain *BlockChain, i, n int, full bool, comparator func(td1, td2 *big.Int), scheme string) {
 	// Copy old chain up to #i into a new db
 	genDb, _, blockchain2, err := newCanonical(ethash.NewFaker(), i, full, scheme)
@@ -222,9 +224,16 @@ func testLastBlock(t *testing.T, scheme string) {
 
 // Test inserts the blocks/headers after the fork choice rule is changed.
 // The chain is reorged to whatever specified.
+// CHANGE(immutable): Wraps testInsertAfterMergeConfigurable to allow for customization
 func testInsertAfterMerge(t *testing.T, blockchain *BlockChain, i, n int, full bool, scheme string) {
+	testInsertAfterMergeConfigurable(t, blockchain, i, n, full, scheme, newCanonical)
+}
+
+func testInsertAfterMergeConfigurable(t *testing.T, blockchain *BlockChain, i, n int, full bool, scheme string,
+	newCanonicalChain func(engine consensus.Engine, n int, full bool, scheme string) (ethdb.Database, *Genesis, *BlockChain, error),
+) {
 	// Copy old chain up to #i into a new db
-	genDb, _, blockchain2, err := newCanonical(ethash.NewFaker(), i, full, scheme)
+	genDb, _, blockchain2, err := newCanonicalChain(ethash.NewFaker(), i, full, scheme)
 	if err != nil {
 		t.Fatal("could not make new canonical in testFork", err)
 	}

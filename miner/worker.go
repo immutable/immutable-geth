@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
@@ -60,7 +61,8 @@ const (
 
 	// maxRecommitInterval is the maximum time interval to recreate the sealing block with
 	// any newly arrived transactions.
-	maxRecommitInterval = 15 * time.Second
+	// CHANGE(immutable): set to max to avoid reorg
+	maxRecommitInterval = 999999999 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -78,6 +80,21 @@ var (
 	errBlockInterruptedByNewHead  = errors.New("new head arrived while building block")
 	errBlockInterruptedByRecommit = errors.New("recommit interrupt while building block")
 	errBlockInterruptedByTimeout  = errors.New("timeout while building block")
+
+	// CHANGE(immutable): add metrics to geth worker loop
+	gasUsedGuage           = metrics.NewRegisteredGauge("worker/block/gasused", nil)
+	blockTxGauge           = metrics.NewRegisteredGauge("worker/block/tx", nil)
+	txExecutionTimer       = metrics.NewRegisteredTimer("worker/block/txexecution", nil)
+	blockConstructionTimer = metrics.NewRegisteredTimer("worker/block/blockconstruction", nil)
+	commitWorkTimer        = metrics.NewRegisteredTimer("worker/block/commitwork", nil)
+	prepareWorkTimer       = metrics.NewRegisteredTimer("worker/block/preparework", nil)
+	taskLoopTimer          = metrics.NewRegisteredTimer("worker/block/taskloop", nil)
+	resultLoopTimer        = metrics.NewRegisteredTimer("worker/block/resultloop", nil)
+
+	// CHANGE(immutable): define start time for block construction as process is across multiple functions
+	blockConstructionStartTime time.Time
+	taskLoopStartTime          time.Time
+	blockConstructionTrigger   bool
 )
 
 // environment is the worker's current environment and holds all
@@ -464,6 +481,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
+			// CHANGE(immutable): capture start time for block construction
+			blockConstructionStartTime = time.Now()
+			blockConstructionTrigger = true
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(commitInterruptNewHead)
@@ -499,11 +519,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				before := recommit
 				target := float64(recommit.Nanoseconds()) / adjust.ratio
 				recommit = recalcRecommit(minRecommit, recommit, target, true)
-				log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
+				log.Warn("Increase miner recommit interval", "from", before, "to", recommit)
 			} else {
 				before := recommit
 				recommit = recalcRecommit(minRecommit, recommit, float64(minRecommit.Nanoseconds()), false)
-				log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
+				log.Warn("Decrease miner recommit interval", "from", before, "to", recommit)
 			}
 
 			if w.resubmitHook != nil {
@@ -604,7 +624,11 @@ func (w *worker) taskLoop() {
 	)
 
 	// interrupt aborts the in-flight sealing task.
-	interrupt := func() {
+	// CHANGE(immutable): add task parameter for logging
+	interrupt := func(task *task) {
+		if task != nil {
+			log.Info("Interrupting sealing task", "block number", task.block.Number().String())
+		}
 		if stopCh != nil {
 			close(stopCh)
 			stopCh = nil
@@ -613,6 +637,8 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
+			// CHANGE(immutable): capture time we receive a new task
+			taskLoopStartTime = time.Now()
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -622,9 +648,9 @@ func (w *worker) taskLoop() {
 				continue
 			}
 			// Interrupt previous sealing operation
-			interrupt()
+			interrupt(task)
 			stopCh, prev = make(chan struct{}), sealHash
-
+			// Log the interrupt here w/ block number
 			if w.skipSealHook != nil && w.skipSealHook(task) {
 				continue
 			}
@@ -638,8 +664,10 @@ func (w *worker) taskLoop() {
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
 			}
+			// Log here when the sealing task is complete
 		case <-w.exitCh:
-			interrupt()
+			// CHANGE(immutable): populate empty task for logging
+			interrupt(nil)
 			return
 		}
 	}
@@ -652,6 +680,11 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
+			// CHANGE(immutable): capture taskloop processing time
+			taskLoopTimer.UpdateSince(taskLoopStartTime)
+			// CHANGE(immutable): capture result loop start time
+			start := time.Now()
+
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -709,6 +742,21 @@ func (w *worker) resultLoop() {
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
+			// CHANGE(immutable): capture block construction time
+			if blockConstructionTrigger {
+				blockConstructionTimer.UpdateSince(blockConstructionStartTime)
+				blockConstructionTrigger = false
+			}
+
+			// CHANGE(immutable): update tx count in block based on receipts
+			blockTxGauge.Update(int64(len(task.receipts)))
+
+			// CHANGE(immutable): capture gas used in block
+			gasUsedGuage.Update(int64(block.GasUsed()))
+
+			// CHANGE(immutable): capture result loop processing time
+			resultLoopTimer.UpdateSince(start)
+
 		case <-w.exitCh:
 			return
 		}
@@ -755,13 +803,23 @@ func (w *worker) updateSnapshot(env *environment) {
 
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
 	if tx.Type() == types.BlobTxType {
+		// CHANGE(immutable) disable blob transactions
+		if w.chainConfig.IsImmutableZKEVM() {
+			return nil, fmt.Errorf("blob transactions are not supported")
+		}
 		return w.commitBlobTransaction(env, tx)
 	}
 	receipt, err := w.applyTransaction(env, tx)
 	if err != nil {
+		// CHANGE(immutable) add error logging
+		log.Warn("Transaction failed, discarding", "hash", tx.Hash(), "err", err)
 		return nil, err
 	}
 	env.txs = append(env.txs, tx)
+	if receipt.Status == types.ReceiptStatusFailed {
+		// CHANGE(immutable) add error logging
+		log.Warn("receipt status : failed", "hash", tx.Hash())
+	}
 	env.receipts = append(env.receipts, receipt)
 	return receipt.Logs, nil
 }
@@ -905,6 +963,7 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 			txs.Pop()
 		}
 	}
+
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
 		// when we are sealing, the worker will regenerate a sealing block every 3 seconds.
@@ -984,8 +1043,18 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
 		}
 	}
-	// Apply EIP-4844, EIP-4788.
+	// Run the consensus preparation with the default or customized consensus engine.
+	if err := w.engine.Prepare(w.chain, header); err != nil {
+		log.Error("Failed to prepare header for sealing", "err", err)
+		return nil, err
+	}
+	// CHANGE(immutable): Move this logic after engine.Prepare because
+	// clique can update the block time which would cause the logic below to
+	// panic if the change in time brought a parent block into cancun fork time.
+	// This change means that consensus implementations will not have access to
+	// blob related fields and parent beacon root.
 	if w.chainConfig.IsCancun(header.Number, header.Time) {
+		// Apply EIP-4844, EIP-4788.
 		var excessBlobGas uint64
 		if w.chainConfig.IsCancun(parent.Number, parent.Time) {
 			excessBlobGas = eip4844.CalcExcessBlobGas(*parent.ExcessBlobGas, *parent.BlobGasUsed)
@@ -997,11 +1066,6 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		header.ExcessBlobGas = &excessBlobGas
 		header.ParentBeaconRoot = genParams.beaconRoot
 	}
-	// Run the consensus preparation with the default or customized consensus engine.
-	if err := w.engine.Prepare(w.chain, header); err != nil {
-		log.Error("Failed to prepare header for sealing", "err", err)
-		return nil, err
-	}
 	// Could potentially happen if starting to mine in an odd state.
 	// Note genParams.coinbase can be different with header.Coinbase
 	// since clique algorithm can modify the coinbase field in header.
@@ -1011,7 +1075,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		return nil, err
 	}
 	if header.ParentBeaconRoot != nil {
-		context := core.NewEVMBlockContext(header, w.chain, nil)
+		context := core.NewEVMBlockContext(header, w.chain, nil, w.chainConfig)
 		vmenv := vm.NewEVM(context, vm.TxContext{}, env.state, w.chainConfig, vm.Config{})
 		core.ProcessBeaconBlockRoot(*header.ParentBeaconRoot, vmenv, env.state)
 	}
@@ -1022,14 +1086,19 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) error {
-	w.mu.RLock()
-	tip := w.tip
-	w.mu.RUnlock()
-
+	// CHANGE(immutable): Disable tip enforcement so that we mine txs
+	// that are priced below price limit + base fee.
 	// Retrieve the pending transactions pre-filtered by the 1559/4844 dynamic fees
+	var tip *uint256.Int
+	if !w.chainConfig.IsImmutableZKEVM() {
+		w.mu.RLock()
+		tip = w.tip
+		w.mu.RUnlock()
+	}
 	filter := txpool.PendingFilter{
 		MinTip: tip,
 	}
+
 	if env.header.BaseFee != nil {
 		filter.BaseFee = uint256.MustFromBig(env.header.BaseFee)
 	}
@@ -1073,6 +1142,7 @@ func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) err
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1128,12 +1198,21 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
+		// CHANGE(immutable): Add the BeaconRoot value of MinHash as an input to work generation,
+		// so that the block producer appropriately sets the Beacon Root
+		beaconRoot: &common.MinHash,
 	})
 	if err != nil {
 		return
 	}
+	// CHANGE(immutable): capture time spent preparing work
+	prepareWorkTimer.UpdateSince(start)
+
 	// Fill pending transactions from the txpool into the block.
 	err = w.fillTransactions(interrupt, work)
+	// CHANGE(immutable): update tx execution timer
+	txExecutionTimer.UpdateSince(start)
+
 	switch {
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
@@ -1198,6 +1277,9 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 				log.Info("Commit new sealing work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 					"txs", env.tcount, "gas", block.GasUsed(), "fees", feesInEther,
 					"elapsed", common.PrettyDuration(time.Since(start)))
+
+				// CHANGE(immutable): capture time spent committing sealing work
+				commitWorkTimer.UpdateSince(start)
 
 			case <-w.exitCh:
 				log.Info("Worker has exited")

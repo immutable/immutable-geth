@@ -36,6 +36,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/settings"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/core"
@@ -155,6 +156,34 @@ var (
 		Usage:    "Holesky network: pre-configured proof-of-stake test network",
 		Category: flags.EthCategory,
 	}
+	// CHANGE(immutable): Add network flag for zkEVM.
+	ImmutableNetworkFlag = &cli.StringFlag{
+		Name:     "zkevm",
+		Usage:    "Immutable zkEVM network (mainnet, testnet, devnet)",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"GETH_FLAG_IMMUTABLE_NETWORK"},
+	}
+	// CHANGE(immutable): Add flag for toggling default peer gossiping.
+	ImmutableGossipDefaultFlag = &cli.BoolFlag{
+		Name:     "gossipdefault",
+		Usage:    "If set, use the default geth gossiping behaviour, only gossiping to a subset of peers",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"GETH_FLAG_IMMUTABLE_GOSSIPDEFAULT"},
+	}
+	// CHANGE(immutable): Add flag to disable tx gossiping.
+	ImmutableDisableTxPoolGossipFlag = &cli.BoolFlag{
+		Name:     "disabletxpoolgossip",
+		Usage:    "If set, disable tx gossiping (egress)",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"GETH_FLAG_IMMUTABLE_DISABLETXPOOLGOSSIP"},
+	}
+	// CHANGE(immutable): Add flag to forward to the Immutable RPC.
+	ImmutableRPCProxyFlag = &cli.BoolFlag{
+		Name:     "rpcproxy",
+		Usage:    "If set, forward transactions to the Immutable RPC",
+		Category: flags.EthCategory,
+		EnvVars:  []string{"GETH_FLAG_IMMUTABLE_RPCPROXY"},
+	}
 	// Dev mode
 	DeveloperFlag = &cli.BoolFlag{
 		Name:     "dev",
@@ -252,6 +281,17 @@ var (
 		Usage:    "Manually specify the Verkle fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
+	// CHANGE(immutable): Add fork override flags
+	OverridePrevrandao = &cli.Uint64Flag{
+		Name:     "override.prevrandao",
+		Usage:    "Manually specify the Prevrandao fork timestamp. Intended for testing only, use --zkevm.* instead",
+		Category: flags.EthCategory,
+	}
+	OverrideShanghai = &cli.Uint64Flag{
+		Name:     "override.shanghai",
+		Usage:    "Manually specify the Shanghai fork timestamp. Intended for testing only, use --zkevm.* instead",
+		Category: flags.EthCategory,
+	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
 		Name:     "syncmode",
 		Usage:    `Blockchain sync mode ("snap" or "full")`,
@@ -345,6 +385,13 @@ var (
 		Usage:    "Maximum amount of time non-executable transaction are queued",
 		Value:    ethconfig.Defaults.TxPool.Lifetime,
 		Category: flags.TxPoolCategory,
+	}
+	// CHANGE(immutable): allow the setting of ACLs block/allow lists for txpool
+	TxPoolBlockListFilePaths = &cli.StringSliceFlag{
+		Name:     "txpool.blocklistfilepaths",
+		Usage:    "TxPoolBlockListFilePaths allows you to specify one or more file paths containing blocklists for the transaction pool",
+		Category: flags.TxPoolCategory,
+		Value:    &cli.StringSlice{},
 	}
 	// Blob transaction pool settings
 	BlobPoolDataDirFlag = &cli.StringFlag{
@@ -446,6 +493,14 @@ var (
 		Name:     "miner.etherbase",
 		Usage:    "0x prefixed public address for block mining rewards",
 		Category: flags.MinerCategory,
+		// CHANGE(immutable): Add env var
+		EnvVars: []string{"GETH_FLAG_MINER_ETHERBASE"},
+	}
+	// CHANGE(immutable): Add flag for etherbase address file
+	MinerEtherbaseFileFlag = &cli.StringFlag{
+		Name:     "miner.etherbase-file",
+		Usage:    "filepath to file containing 0x prefixed public address for block mining rewards",
+		Category: flags.MinerCategory,
 	}
 	MinerExtraDataFlag = &cli.StringFlag{
 		Name:     "miner.extradata",
@@ -471,12 +526,30 @@ var (
 		Usage:    "Comma separated list of accounts to unlock",
 		Value:    "",
 		Category: flags.AccountCategory,
+		// CHANGE(immutable): Add env var
+		EnvVars: []string{"GETH_FLAG_UNLOCK_ACCOUNT"},
 	}
 	PasswordFileFlag = &cli.PathFlag{
 		Name:      "password",
 		Usage:     "Password file to use for non-interactive password input",
 		TakesFile: true,
 		Category:  flags.AccountCategory,
+		// CHANGE(immutable): Add flag for local keystore pw
+		EnvVars: []string{"GETH_FLAG_PASSWORD_FILEPATH"},
+	}
+	// CHANGE(immutable): Add AWS region flag
+	ImmutableAWSRegion = &cli.BoolFlag{
+		Name:     "aws.region",
+		Usage:    "name of AWS region used for secret key backends",
+		Category: flags.AccountCategory,
+		EnvVars:  []string{"GETH_FLAG_IMMUTABLE_AWS_REGION"},
+	}
+	// CHANGE(immutable): Add pod namespace flag
+	ImmutablePodNamespace = &cli.BoolFlag{
+		Name:     "k8s.namespace",
+		Usage:    "kubernetes namespace pod is running in. Used for secret key backends",
+		Category: flags.AccountCategory,
+		EnvVars:  []string{"POD_NAMESPACE"},
 	}
 	ExternalSignerFlag = &cli.StringFlag{
 		Name:     "signer",
@@ -514,6 +587,49 @@ var (
 		Name:     "rpc.txfeecap",
 		Usage:    "Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap)",
 		Value:    ethconfig.Defaults.RPCTxFeeCap,
+		Category: flags.APICategory,
+	}
+	// CHANGE(immutable): add a flag option to disable the debug rpc endpoints
+	IsDebugRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.debugdisable",
+		Usage:    "Disable the Debug RPC endpoints",
+		Value:    node.DefaultConfig.DisableDebug,
+		Category: flags.APICategory,
+	}
+	IsAdminRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.admindisable",
+		Usage:    "Disable the Admin RPC endpoints",
+		Value:    node.DefaultConfig.DisableAdmin,
+		Category: flags.APICategory,
+	}
+	IsTxPoolRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.txpooldisable",
+		Usage:    "Disable the txpool RPC endpoints",
+		Value:    node.DefaultConfig.DisableTxPool,
+		Category: flags.APICategory,
+	}
+	IsEngineRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.enginedisable",
+		Usage:    "Disable the engine RPC endpoints",
+		Value:    node.DefaultConfig.DisableEngine,
+		Category: flags.APICategory,
+	}
+	IsCliqueRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.cliquedisable",
+		Usage:    "Disable the clique RPC endpoints",
+		Value:    node.DefaultConfig.DisableClique,
+		Category: flags.APICategory,
+	}
+	IsMinerRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.minerdisable",
+		Usage:    "Disable the miner RPC endpoints",
+		Value:    node.DefaultConfig.DisableMiner,
+		Category: flags.APICategory,
+	}
+	IsPersonalRPCDisabledFlag = &cli.BoolFlag{
+		Name:     "rpc.personaldisable",
+		Usage:    "Disable the personal RPC endpoints",
+		Value:    node.DefaultConfig.DisablePersonal,
 		Category: flags.APICategory,
 	}
 	// Authenticated RPC HTTP settings
@@ -761,6 +877,8 @@ var (
 		Name:     "netrestrict",
 		Usage:    "Restricts network communication to the given IP networks (CIDR masks)",
 		Category: flags.NetworkingCategory,
+		// CHANGE(immutable): Add env var
+		EnvVars: []string{"GETH_FLAG_NET_RESTRICT"},
 	}
 	DNSDiscoveryFlag = &cli.StringFlag{
 		Name:     "discovery.dns",
@@ -911,14 +1029,15 @@ Please note that --` + MetricsHTTPFlag.Name + ` must be set to start the server.
 )
 
 var (
-	// TestnetFlags is the flag group of all built-in supported testnets.
-	TestnetFlags = []cli.Flag{
+	// CHANGE(immutable): append Immutable network flags
+	// NetworkFlags is the flag group of all built-in supported networks.
+	NetworkFlags = []cli.Flag{
+		MainnetFlag,
+		ImmutableNetworkFlag,
 		GoerliFlag,
 		SepoliaFlag,
 		HoleskyFlag,
 	}
-	// NetworkFlags is the flag group of all built-in supported networks.
-	NetworkFlags = append([]cli.Flag{MainnetFlag}, TestnetFlags...)
 
 	// DatabaseFlags is the flag group of all database flags.
 	DatabaseFlags = []cli.Flag{
@@ -1268,10 +1387,24 @@ func MakeAddress(ks *keystore.KeyStore, account string) (accounts.Account, error
 
 // setEtherbase retrieves the etherbase from the directly specified command line flags.
 func setEtherbase(ctx *cli.Context, cfg *ethconfig.Config) {
-	if !ctx.IsSet(MinerEtherbaseFlag.Name) {
+	// CHANGE(immutable): Handle etherbase file env var
+	// Get address from one flag or another
+	addr := ""
+	if ctx.IsSet(MinerEtherbaseFileFlag.Name) {
+		// Read the address from the specified file
+		addrBytes, err := os.ReadFile(ctx.String(MinerEtherbaseFileFlag.Name))
+		if err != nil {
+			Fatalf("Failed to read etherbase addr file: %w", err)
+			return
+		}
+		addr = string(addrBytes)
+	} else if ctx.IsSet(MinerEtherbaseFlag.Name) {
+		addr = ctx.String(MinerEtherbaseFlag.Name)
+	} else {
+		// None specified
 		return
 	}
-	addr := ctx.String(MinerEtherbaseFlag.Name)
+	// Handle the address
 	if strings.HasPrefix(addr, "0x") || strings.HasPrefix(addr, "0X") {
 		addr = addr[2:]
 	}
@@ -1393,6 +1526,28 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 		log.Info(fmt.Sprintf("Using %s as db engine", dbEngine))
 		cfg.DBEngine = dbEngine
 	}
+	// CHANGE(immutable): add a flag to disable the txpool/engine/debug/admin rpc endpoints
+	if ctx.IsSet(IsDebugRPCDisabledFlag.Name) {
+		cfg.DisableDebug = ctx.Bool(IsDebugRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsAdminRPCDisabledFlag.Name) {
+		cfg.DisableAdmin = ctx.Bool(IsAdminRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsTxPoolRPCDisabledFlag.Name) {
+		cfg.DisableTxPool = ctx.Bool(IsTxPoolRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsEngineRPCDisabledFlag.Name) {
+		cfg.DisableEngine = ctx.Bool(IsEngineRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsCliqueRPCDisabledFlag.Name) {
+		cfg.DisableClique = ctx.Bool(IsCliqueRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsMinerRPCDisabledFlag.Name) {
+		cfg.DisableMiner = ctx.Bool(IsMinerRPCDisabledFlag.Name)
+	}
+	if ctx.IsSet(IsPersonalRPCDisabledFlag.Name) {
+		cfg.DisablePersonal = ctx.Bool(IsPersonalRPCDisabledFlag.Name)
+	}
 	// deprecation notice for log debug flags (TODO: find a more appropriate place to put these?)
 	if ctx.IsSet(LogBacktraceAtFlag.Name) {
 		log.Warn("log.backtrace flag is deprecated")
@@ -1493,6 +1648,10 @@ func setTxPool(ctx *cli.Context, cfg *legacypool.Config) {
 	if ctx.IsSet(TxPoolLifetimeFlag.Name) {
 		cfg.Lifetime = ctx.Duration(TxPoolLifetimeFlag.Name)
 	}
+	// CHANGE(immutable): added flags to configure tx pool acls
+	if ctx.IsSet(TxPoolBlockListFilePaths.Name) {
+		cfg.BlockListFilePaths = ctx.StringSlice(TxPoolBlockListFilePaths.Name)
+	}
 }
 
 func setMiner(ctx *cli.Context, cfg *miner.Config) {
@@ -1585,7 +1744,7 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
-	CheckExclusive(ctx, MainnetFlag, DeveloperFlag, GoerliFlag, SepoliaFlag, HoleskyFlag)
+	CheckExclusive(ctx, MainnetFlag, DeveloperFlag, GoerliFlag, SepoliaFlag, HoleskyFlag, ImmutableNetworkFlag)
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 
 	// Set configurations from CLI flags
@@ -1728,8 +1887,32 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
+	// CHANGE(immutable): Handle gossiping configuration.
+	cfg.GossipDefault = ctx.Bool(ImmutableGossipDefaultFlag.Name)
+	// CHANGE(immutable): Handle disable txpool gossip configuration.
+	cfg.DisableTxPoolGossip = ctx.Bool(ImmutableDisableTxPoolGossipFlag.Name)
 	// Override any default configs for hard coded networks.
+	// CHANGE(immutable): Handle proxy RPC forwarding configuration. Ensure this is only on RPC nodes
+	// and is set correctly depending on the Immutable network flag.
+	CheckExclusive(ctx, ImmutableRPCProxyFlag, MiningEnabledFlag)
+	if ctx.IsSet(ImmutableRPCProxyFlag.Name) && ctx.IsSet(ImmutableNetworkFlag.Name) {
+		network, err := settings.NewNetwork(ctx.String(ImmutableNetworkFlag.Name))
+		if err != nil {
+			Fatalf(err.Error())
+		}
+		cfg.RPCProxyURL, err = network.RPC()
+		if err != nil {
+			Fatalf(err.Error())
+		}
+		log.Info("Setting RPC Proxy on node", "url", cfg.RPCProxyURL)
+	}
 	switch {
+	// CHANGE(immutable): handle Immutable networks
+	case ctx.IsSet(ImmutableNetworkFlag.Name):
+		cfg.Genesis = core.ImmutableGenesisBlock(ctx.String(ImmutableNetworkFlag.Name))
+		if !ctx.IsSet(NetworkIdFlag.Name) {
+			cfg.NetworkId = cfg.Genesis.Config.ChainID.Uint64()
+		}
 	case ctx.Bool(MainnetFlag.Name):
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1
@@ -2055,6 +2238,9 @@ func DialRPCWithHeaders(endpoint string, headers []string) (*rpc.Client, error) 
 func MakeGenesis(ctx *cli.Context) *core.Genesis {
 	var genesis *core.Genesis
 	switch {
+	// CHANGE(immutable): handle Immutable networks
+	case ctx.IsSet(ImmutableNetworkFlag.Name):
+		genesis = core.ImmutableGenesisBlock(ctx.String(ImmutableNetworkFlag.Name))
 	case ctx.Bool(MainnetFlag.Name):
 		genesis = core.DefaultGenesisBlock()
 	case ctx.Bool(HoleskyFlag.Name):

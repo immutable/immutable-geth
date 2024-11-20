@@ -73,7 +73,8 @@ func (it *Iterator) Block() (*types.Block, error) {
 	if err := rlp.Decode(it.inner.Body, &body); err != nil {
 		return nil, err
 	}
-	return types.NewBlockWithHeader(&header).WithBody(body.Transactions, body.Uncles), nil
+	// CHANGE(immutable): Add Withdrawals support
+	return types.NewBlockWithHeader(&header).WithBody(body.Transactions, body.Uncles).WithWithdrawals(body.Withdrawals), nil
 }
 
 // Receipts returns the receipts for the iterator's current position.

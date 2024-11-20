@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -71,6 +72,10 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 	}
 	if !opts.Config.IsCancun(head.Number, head.Time) && tx.Type() == types.BlobTxType {
 		return fmt.Errorf("%w: type %d rejected, pool not yet in Cancun", core.ErrTxTypeNotSupported, tx.Type())
+	}
+	// CHANGE(immutable): Reject blob transactions
+	if opts.Config.IsImmutableZKEVM() && tx.Type() == types.BlobTxType {
+		return fmt.Errorf("%w: type %d rejected, blob transactions not supported", core.ErrTxTypeNotSupported, tx.Type())
 	}
 	// Check whether the init code size has been exceeded
 	if opts.Config.IsShanghai(head.Number, head.Time) && tx.To() == nil && len(tx.Data()) > params.MaxInitCodeSize {
@@ -244,6 +249,16 @@ func ValidateTransactionWithState(tx *types.Transaction, signer types.Signer, op
 		if used, left := opts.UsedAndLeftSlots(from); left <= 0 {
 			return fmt.Errorf("%w: pooled %d txs", ErrAccountLimitExceeded, used)
 		}
+	}
+	return nil
+}
+
+// EnsureFileCanBeRead checks if a file exists at the specified path
+// CHANGE(immutable): utility function to help check for file existence
+func EnsureFileCanBeRead(filePath string) error {
+	_, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("File couldn't be read: %s, %w", filePath, err)
 	}
 	return nil
 }

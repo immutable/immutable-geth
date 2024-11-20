@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/settings"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core"
@@ -193,7 +194,12 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 		// - All the transactions included are sent by the miner itself.
 		// In these cases, use the latest calculated price for sampling.
 		if len(res.values) == 0 {
-			res.values = []*big.Int{lastPrice}
+			// CHANGE(immutable): Handle empty blocks
+			if oracle.backend.ChainConfig().IsImmutableZKEVM() {
+				res.values = []*big.Int{big.NewInt(settings.PriceLimit)}
+			} else {
+				res.values = []*big.Int{lastPrice}
+			}
 		}
 		// Besides, in order to collect enough data for sampling, if nothing
 		// meaningful returned, try to query more blocks. But the maximum
@@ -213,6 +219,13 @@ func (oracle *Oracle) SuggestTipCap(ctx context.Context) (*big.Int, error) {
 	}
 	if price.Cmp(oracle.maxPrice) > 0 {
 		price = new(big.Int).Set(oracle.maxPrice)
+	}
+	// CHANGE(immutable): Enforce the price limit
+	if oracle.backend.ChainConfig().IsImmutableZKEVM() {
+		limit := big.NewInt(settings.PriceLimit)
+		if price.Cmp(limit) < 0 {
+			price = limit
+		}
 	}
 	oracle.cacheLock.Lock()
 	oracle.lastHead = headHash

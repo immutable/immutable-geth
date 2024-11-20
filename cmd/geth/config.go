@@ -18,19 +18,25 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/external"
+	"github.com/ethereum/go-ethereum/accounts/immutable"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/accounts/scwallet"
 	"github.com/ethereum/go-ethereum/accounts/usbwallet"
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/keys"
+	inode "github.com/ethereum/go-ethereum/cmd/geth/immutable/node"
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/role"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -177,6 +183,9 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		v := ctx.Uint64(utils.OverrideVerkle.Name)
 		cfg.Eth.OverrideVerkle = &v
 	}
+	// CHANGE(immutable): Add overrides
+	immutableOverrides(ctx, &cfg)
+
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
@@ -325,6 +334,59 @@ func setAccountManagerBackends(conf *node.Config, am *accounts.Manager, keydir s
 	if conf.UseLightweightKDF {
 		scryptN = keystore.LightScryptN
 		scryptP = keystore.LightScryptP
+	}
+
+	// CHANGE(immutable): Add immutable backend with local keystore for testing custom backend
+	pwFilepath := os.Getenv("GETH_FLAG_PASSWORD_FILEPATH")
+	if len(pwFilepath) > 0 {
+		log.Info("Using immutable backend with local keystore")
+		// Initialize keystore
+		store, err := immutable.NewKeystore(keydir, pwFilepath)
+		if err != nil {
+			return fmt.Errorf("error creating immutable keystore: %v, dir (%s)", err, keydir)
+		}
+		// Initialize and register backend
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		backend, err := immutable.NewBackend(ctx, store)
+		if err != nil {
+			return fmt.Errorf("error creating immutable backend: %v", err)
+		}
+		am.AddBackend(backend)
+		return nil
+	}
+	// CHANGE(immutable): Add immutable backend with AWS Secrets Manager
+	awsRegion := os.Getenv("GETH_FLAG_IMMUTABLE_AWS_REGION")
+	if len(awsRegion) > 0 {
+		// Read pod name for validator ordinal
+		podOrdinal, err := ordinalFromPodNameEnvVar()
+		if err != nil {
+			return err
+		}
+		secretIDTemplate, err := keys.SecretIDTemplate()
+		if err != nil {
+			return err
+		}
+		validatorName := inode.CanonicalNodeName(role.Validator, podOrdinal)
+		validatorSecretID, err := keys.SecretID(secretIDTemplate, validatorName)
+		if err != nil {
+			return err
+		}
+		// Initialize AWS Secrets Manager Store
+		log.Info("Using immutable backend with AWS Secrets Manager", "region", awsRegion, "validator", validatorName)
+		store, err := immutable.NewAWSSecretsManagerStore(awsRegion, validatorSecretID)
+		if err != nil {
+			return fmt.Errorf("failed to create AWS SecretsManager Store: %v ", err)
+		}
+		// Initialize and register backend
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		backend, err := immutable.NewBackend(ctx, store)
+		if err != nil {
+			return fmt.Errorf("error creating immutable backend: %v", err)
+		}
+		am.AddBackend(backend)
+		return nil
 	}
 
 	// Assemble the supported backends

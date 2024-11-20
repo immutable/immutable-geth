@@ -67,6 +67,9 @@ var (
 		utils.SmartCardDaemonPathFlag,
 		utils.OverrideCancun,
 		utils.OverrideVerkle,
+		// CHANGE(immutable): Add fork overrides
+		utils.OverridePrevrandao,
+		utils.OverrideShanghai,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
@@ -79,6 +82,8 @@ var (
 		utils.TxPoolAccountQueueFlag,
 		utils.TxPoolGlobalQueueFlag,
 		utils.TxPoolLifetimeFlag,
+		// CHANGE(immutable): added flags to configure tx pool acls
+		utils.TxPoolBlockListFilePaths,
 		utils.BlobPoolDataDirFlag,
 		utils.BlobPoolDataCapFlag,
 		utils.BlobPoolPriceBumpFlag,
@@ -120,6 +125,8 @@ var (
 		utils.MinerGasLimitFlag,
 		utils.MinerGasPriceFlag,
 		utils.MinerEtherbaseFlag,
+		// CHANGE(immutable): added flag for etherebase file
+		utils.MinerEtherbaseFileFlag,
 		utils.MinerExtraDataFlag,
 		utils.MinerRecommitIntervalFlag,
 		utils.MinerNewPayloadTimeout,
@@ -146,6 +153,12 @@ var (
 		configFileFlag,
 		utils.LogDebugFlag,
 		utils.LogBacktraceAtFlag,
+		// CHANGE(immutable): Add flag for using geths default gossiping.
+		utils.ImmutableGossipDefaultFlag,
+		// CHANGE(immutable): Add flag for disabling tx pool gossiping.
+		utils.ImmutableDisableTxPoolGossipFlag,
+		// CHANGE(immutable): Add flag for rpc proxy forwarding.
+		utils.ImmutableRPCProxyFlag,
 	}, utils.NetworkFlags, utils.DatabaseFlags)
 
 	rpcFlags = []cli.Flag{
@@ -170,6 +183,13 @@ var (
 		utils.WSAllowedOriginsFlag,
 		utils.WSPathPrefixFlag,
 		utils.IPCDisabledFlag,
+		utils.IsTxPoolRPCDisabledFlag,
+		utils.IsEngineRPCDisabledFlag,
+		utils.IsDebugRPCDisabledFlag,
+		utils.IsAdminRPCDisabledFlag,
+		utils.IsCliqueRPCDisabledFlag,
+		utils.IsMinerRPCDisabledFlag,
+		utils.IsPersonalRPCDisabledFlag,
 		utils.IPCPathFlag,
 		utils.InsecureUnlockAllowedFlag,
 		utils.RPCGlobalGasCapFlag,
@@ -235,6 +255,8 @@ func init() {
 		snapshotCommand,
 		// See verkle.go
 		verkleCommand,
+		// CHANGE(immutable): Add immutable subcommand
+		immutableCommand,
 	}
 	if logTestCommand != nil {
 		app.Commands = append(app.Commands, logTestCommand)
@@ -287,6 +309,10 @@ func prepare(ctx *cli.Context) {
 	case ctx.IsSet(utils.HoleskyFlag.Name):
 		log.Info("Starting Geth on Holesky testnet...")
 
+	// CHANGE(immutable): Add network log
+	case ctx.IsSet(utils.ImmutableNetworkFlag.Name):
+		log.Info(fmt.Sprintf("Starting Geth on Immutable zkEVM %s...", ctx.String(utils.ImmutableNetworkFlag.Name)))
+
 	case ctx.IsSet(utils.DeveloperFlag.Name):
 		log.Info("Starting Geth in ephemeral dev mode...")
 		log.Warn(`You are running Geth in --dev mode. Please note the following:
@@ -304,9 +330,9 @@ func prepare(ctx *cli.Context) {
   5. Networking is disabled; there is no listen-address, the maximum number of peers is set
      to 0, and discovery is disabled.
 `)
-
-	case !ctx.IsSet(utils.NetworkIdFlag.Name):
-		log.Info("Starting Geth on Ethereum mainnet...")
+		// CHANGE(immutable): RM misleading log
+		//case !ctx.IsSet(utils.NetworkIdFlag.Name):
+		//	log.Info("Starting Geth on Ethereum mainnet...")
 	}
 	// If we're a full node on mainnet without --cache specified, bump default cache allowance
 	if !ctx.IsSet(utils.CacheFlag.Name) && !ctx.IsSet(utils.NetworkIdFlag.Name) {
@@ -339,6 +365,12 @@ func geth(ctx *cli.Context) error {
 	prepare(ctx)
 	stack, backend := makeFullNode(ctx)
 	defer stack.Close()
+
+	// CHANGE(immutable): Disallow running misconfigured Immutable zkEVM settings
+	if backend.ChainConfig().IsImmutableZKEVM() &&
+		!backend.ChainConfig().IsValidImmutableZKEVM() {
+		return fmt.Errorf("Immutable zkEVM network ID sepcified but the configuration is invalid: %+v", *backend.ChainConfig())
+	}
 
 	startNode(ctx, stack, backend, false)
 	stack.Wait()

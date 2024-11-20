@@ -19,16 +19,20 @@ package eth
 import (
 	"fmt"
 	"math/big"
+	"net/netip"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/params"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -177,6 +181,9 @@ var eth68 = map[uint64]msgHandler{
 	PooledTransactionsMsg:         handlePooledTransactions,
 }
 
+// CHANGE(immutable): Codes to filter out from public peers. These codes are for consuming state from peers.
+var ignoredCodes = []uint64{NewBlockHashesMsg, NewBlockMsg, TransactionsMsg, NewPooledTransactionHashesMsg, PooledTransactionsMsg}
+
 // handleMessage is invoked whenever an inbound message is received from a remote
 // peer. The remote connection is torn down upon returning any error.
 func handleMessage(backend Backend, peer *Peer) error {
@@ -188,6 +195,35 @@ func handleMessage(backend Backend, peer *Peer) error {
 	if msg.Size > maxMessageSize {
 		return fmt.Errorf("%w: %v > %v", errMsgTooLarge, msg.Size, maxMessageSize)
 	}
+
+	// CHANGE(immutable): Ignore messages from peers not in the private subnet if configured to do so.
+	if subnetStr, isLocalOnly := os.LookupEnv("GETH_FLAG_P2P_SUBNET"); isLocalOnly {
+		// Parse the subnet string.
+		subnet, err := netip.ParsePrefix(subnetStr)
+		if err != nil {
+			return fmt.Errorf("failed to parse private subnet string (%s): %v", subnetStr, err)
+		}
+		// Convert the peer IP to an address.
+		peerAddr, err := netip.ParseAddr(peer.Node().IP().String())
+		if err != nil {
+			return fmt.Errorf("failed to parse peer IP: %v", err)
+		}
+		// Handle specific msg codes if not in the subnet.
+		if !subnet.Contains(peerAddr) {
+			// We only want to discard messages that would be consuming state, e.g. NewBlockMsg.
+			// We don't want to discard messages that are requesting state, e.g. GetBlockHeadersMsg,
+			// as this is required for recieving state in syncing for example.
+			if slices.Contains(ignoredCodes, msg.Code) {
+				// External peers should be configured to not send state to the public peer node.
+				// Log the peer information so that we can follow up as to why the peer is sending messages.
+				log.Warn("ignoring message from peer outside of required subnet",
+					"subnet", subnet.String(), "peerAddr", peerAddr.String(), "msgCode", msg.Code,
+					"peerID", peer.ID(), "peerFullname", peer.Fullname())
+				return msg.Discard()
+			}
+		}
+	}
+
 	defer msg.Discard()
 
 	var handlers = eth68

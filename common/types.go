@@ -48,6 +48,9 @@ var (
 	// MaxAddress represents the maximum possible address value.
 	MaxAddress = HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
 
+	// MinHash represents the minimum possible hash value.
+	MinHash = HexToHash("0x0") // CHANGE(immutable): Add MinHash var.
+
 	// MaxHash represents the maximum possible hash value.
 	MaxHash = HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 )

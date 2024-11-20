@@ -38,6 +38,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gofrs/flock"
+	"github.com/newrelic/go-agent/v3/integrations/nrlogrus"
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 // Node is a container on which services can be registered.
@@ -53,7 +55,7 @@ type Node struct {
 	server        *p2p.Server   // Currently running P2P networking layer
 	startStopLock sync.Mutex    // Start/Stop are protected by an additional lock
 	state         int           // Tracks state of node lifecycle
-
+	NewRelic      *newrelic.Application
 	lock          sync.Mutex
 	lifecycles    []Lifecycle // All registered backends, services, and auxiliary services that have a lifecycle
 	rpcAPIs       []rpc.API   // List of APIs currently provided by the node
@@ -103,6 +105,27 @@ func New(conf *Config) (*Node, error) {
 	}
 	server := rpc.NewServer()
 	server.SetBatchLimits(conf.BatchRequestLimit, conf.BatchResponseMaxSize)
+
+	// Initialise New Relic agent
+	// CHANGE(immutable) add NR agent
+	conf.Logger.Info("initialising New Relic agent...")
+	var nrApp *newrelic.Application
+	var err error
+	if os.Getenv("NEW_RELIC_APP_NAME") != "" {
+		nrApp, err = newrelic.NewApplication(
+			newrelic.ConfigFromEnvironment(),
+			newrelic.ConfigEnabled(true),
+			nrlogrus.ConfigStandardLogger(),
+			newrelic.ConfigDistributedTracerEnabled(true),
+		)
+		if err != nil {
+			log.Error("Failed to initialise New Relic agent: ", err)
+			nrApp = nil
+		}
+	} else {
+		log.Error("Failed to initialise New Relic agent: NEW_RELIC_APP_NAME missing")
+	}
+
 	node := &Node{
 		config:        conf,
 		inprocHandler: server,
@@ -111,6 +134,7 @@ func New(conf *Config) (*Node, error) {
 		stop:          make(chan struct{}),
 		server:        &p2p.Server{Config: conf.P2P},
 		databases:     make(map[*closeTrackingDB]struct{}),
+		NewRelic:      nrApp,
 	}
 
 	// Register built-in APIs.
@@ -209,11 +233,18 @@ func (n *Node) Close() error {
 	n.lock.Lock()
 	state := n.state
 	n.lock.Unlock()
+
+	// CHANGE(immutable): log node close procedure
+	logFunc := func(state string) {
+		n.log.Info("Node close procedure", "state", state)
+	}
 	switch state {
 	case initializingState:
+		logFunc("initializing")
 		// The node was never started.
 		return n.doClose(nil)
 	case runningState:
+		logFunc("running")
 		// The node was started, release resources acquired by Start().
 		var errs []error
 		if err := n.stopServices(n.lifecycles); err != nil {
@@ -221,6 +252,7 @@ func (n *Node) Close() error {
 		}
 		return n.doClose(errs)
 	case closedState:
+		logFunc("closed")
 		return ErrNodeStopped
 	default:
 		panic(fmt.Sprintf("node is in unknown state %d", state))
@@ -413,7 +445,8 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.HTTPHost, port); err != nil {
 			return err
 		}
-		if err := server.enableRPC(openAPIs, httpConfig{
+		// CHANGE(immutable) add NR agent
+		if err := server.enableRPC(n.NewRelic, openAPIs, httpConfig{
 			CorsAllowedOrigins: n.config.HTTPCors,
 			Vhosts:             n.config.HTTPVirtualHosts,
 			Modules:            n.config.HTTPModules,
@@ -431,7 +464,7 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.WSHost, port); err != nil {
 			return err
 		}
-		if err := server.enableWS(openAPIs, wsConfig{
+		if err := server.enableWS(n.NewRelic, openAPIs, wsConfig{
 			Modules:           n.config.WSModules,
 			Origins:           n.config.WSOrigins,
 			prefix:            n.config.WSPathPrefix,
@@ -455,7 +488,8 @@ func (n *Node) startRPC() error {
 			batchResponseSizeLimit: engineAPIBatchResponseSizeLimit,
 			httpBodyLimit:          engineAPIBodyLimit,
 		}
-		err := server.enableRPC(allAPIs, httpConfig{
+		// CHANGE(immutable) add NR agent
+		err := server.enableRPC(n.NewRelic, allAPIs, httpConfig{
 			CorsAllowedOrigins: DefaultAuthCors,
 			Vhosts:             n.config.AuthVirtualHosts,
 			Modules:            DefaultAuthModules,
@@ -472,7 +506,7 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.AuthAddr, port); err != nil {
 			return err
 		}
-		if err := server.enableWS(allAPIs, wsConfig{
+		if err := server.enableWS(n.NewRelic, allAPIs, wsConfig{
 			Modules:           DefaultAuthModules,
 			Origins:           DefaultAuthOrigins,
 			prefix:            DefaultAuthPrefix,
@@ -597,6 +631,30 @@ func (n *Node) RegisterAPIs(apis []rpc.API) {
 // authentication, and the complete set
 func (n *Node) getAPIs() (unauthenticated, all []rpc.API) {
 	for _, api := range n.rpcAPIs {
+		// CHANGE(immutable): the rpc apis returned here are the ones used by rpc
+		// We've made a modification here to filter out certain rpc API depending on
+		// config flags
+		if n.config.DisableAdmin && api.Namespace == "admin" {
+			continue
+		}
+		if n.config.DisableEngine && api.Namespace == "engine" {
+			continue
+		}
+		if n.config.DisableTxPool && api.Namespace == "txpool" {
+			continue
+		}
+		if n.config.DisableDebug && api.Namespace == "debug" {
+			continue
+		}
+		if n.config.DisableClique && api.Namespace == "clique" {
+			continue
+		}
+		if n.config.DisableMiner && api.Namespace == "miner" {
+			continue
+		}
+		if n.config.DisablePersonal && api.Namespace == "personal" {
+			continue
+		}
 		if !api.Authenticated {
 			unauthenticated = append(unauthenticated, api)
 		}
@@ -615,8 +673,8 @@ func (n *Node) RegisterHandler(name, path string, handler http.Handler) {
 	if n.state != initializingState {
 		panic("can't register HTTP handler on running/stopped node")
 	}
-
-	n.http.mux.Handle(path, handler)
+	// CHANGE(immutable): wrap the handler with newrelic middleware
+	n.http.mux.Handle(path, newRelicMiddleware(n.NewRelic, handler))
 	n.http.handlerNames[path] = name
 }
 

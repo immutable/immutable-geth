@@ -32,6 +32,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/rs/cors"
 )
 
@@ -294,7 +295,8 @@ func (h *httpServer) doStop() {
 }
 
 // enableRPC turns on JSON-RPC over HTTP on the server.
-func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error {
+// CHANGE(immutable) add NR agent
+func (h *httpServer) enableRPC(nrApp *newrelic.Application, apis []rpc.API, config httpConfig) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -312,10 +314,13 @@ func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error {
 		return err
 	}
 	h.httpConfig = config
-	h.httpHandler.Store(&rpcHandler{
-		Handler: NewHTTPHandlerStack(srv, config.CorsAllowedOrigins, config.Vhosts, config.jwtSecret),
+	// CHANGE(immutable): wrap the RPC handler with newrelic middleware
+
+	rpcHandler := &rpcHandler{
+		Handler: NewHTTPHandlerStack(newRelicMiddleware(nrApp, srv), config.CorsAllowedOrigins, config.Vhosts, config.jwtSecret),
 		server:  srv,
-	})
+	}
+	h.httpHandler.Store(rpcHandler)
 	return nil
 }
 
@@ -330,7 +335,8 @@ func (h *httpServer) disableRPC() bool {
 }
 
 // enableWS turns on JSON-RPC over WebSocket on the server.
-func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error {
+// CHANGE(immutable) add NR agent
+func (h *httpServer) enableWS(nrApp *newrelic.Application, apis []rpc.API, config wsConfig) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -347,10 +353,12 @@ func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error {
 		return err
 	}
 	h.wsConfig = config
-	h.wsHandler.Store(&rpcHandler{
-		Handler: NewWSHandlerStack(srv.WebsocketHandler(config.Origins), config.jwtSecret),
+	// CHANGE(immutable): wrap the websocket handler with newrelic middleware
+	wsHandler := &rpcHandler{
+		Handler: NewWSHandlerStack(newRelicMiddleware(nrApp, srv.WebsocketHandler(config.Origins)), config.jwtSecret),
 		server:  srv,
-	})
+	}
+	h.wsHandler.Store(wsHandler)
 	return nil
 }
 

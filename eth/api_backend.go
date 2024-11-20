@@ -19,12 +19,14 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -37,9 +39,15 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+)
+
+var (
+	// CHANGE(immutable): Add metric for tipcap
+	suggestTipCapGauge = metrics.NewRegisteredGauge("api/tipcap", nil)
 )
 
 // EthAPIBackend implements ethapi.Backend and tracers.Backend for full nodes
@@ -258,7 +266,7 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg *core.Message, state *st
 	if blockCtx != nil {
 		context = *blockCtx
 	} else {
-		context = core.NewEVMBlockContext(header, b.eth.BlockChain(), nil)
+		context = core.NewEVMBlockContext(header, b.eth.BlockChain(), nil, b.ChainConfig())
 	}
 	return vm.NewEVM(context, txContext, state, b.ChainConfig(), *vmConfig)
 }
@@ -288,6 +296,15 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
+	// CHANGE(immutable): Handle RPC forwarding.
+	if b.eth.rpcProxyClient != nil {
+		data, err := signedTx.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshall binary for rpc proxy forwarding: %s", err.Error())
+		}
+		return b.eth.rpcProxyClient.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data))
+	}
+
 	return b.eth.txPool.Add([]*types.Transaction{signedTx}, true, false)[0]
 }
 
@@ -363,7 +380,13 @@ func (b *EthAPIBackend) SyncProgress() ethereum.SyncProgress {
 }
 
 func (b *EthAPIBackend) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
-	return b.gpo.SuggestTipCap(ctx)
+	// CHANGE(immutable): Record metric for tipcap
+	tipcap, err := b.gpo.SuggestTipCap(ctx)
+	if err != nil {
+		return nil, err
+	}
+	suggestTipCapGauge.Update(tipcap.Int64())
+	return tipcap, nil
 }
 
 func (b *EthAPIBackend) FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (firstBlock *big.Int, reward [][]*big.Int, baseFee []*big.Int, gasUsedRatio []float64, err error) {

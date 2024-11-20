@@ -82,6 +82,11 @@ var (
 	blockValidationTimer = metrics.NewRegisteredTimer("chain/validation", nil)
 	blockExecutionTimer  = metrics.NewRegisteredTimer("chain/execution", nil)
 	blockWriteTimer      = metrics.NewRegisteredTimer("chain/write", nil)
+	// CHANGE(immutable): Add metric for blocks
+	// blockPeriodTimer records number of seconds between adjacent blocks
+	blockPeriodTimer = metrics.NewRegisteredTimer("chain/block/period", nil)
+	// blockPropagationTimer records time taken to receive a block and insert it into the chain
+	blockPropagationTimer = metrics.NewRegisteredTimer("chain/block/propagation", nil)
 
 	blockReorgMeter     = metrics.NewRegisteredMeter("chain/reorg/executes", nil)
 	blockReorgAddMeter  = metrics.NewRegisteredMeter("chain/reorg/add", nil)
@@ -94,6 +99,9 @@ var (
 	errChainStopped         = errors.New("blockchain is stopped")
 	errInvalidOldChain      = errors.New("invalid old chain")
 	errInvalidNewChain      = errors.New("invalid new chain")
+
+	// ErrReorgAttempted CHANGE(immutable) is a new error type returned when a fork invariant is hit.
+	ErrReorgAttempted = errors.New("reorg was attempted")
 )
 
 const (
@@ -1437,6 +1445,12 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 	}
 	defer bc.chainmu.Unlock()
 
+	// CHANGE(immutable): Record block period and log info
+	parentTime := time.Unix(int64(bc.CurrentBlock().Time), 0)
+	headTime := time.Unix(int64(block.Time()), 0)
+	blockPeriod := headTime.Sub(parentTime)
+	blockPeriodTimer.Update(blockPeriod)
+	log.Info("Writing block and setting head", "period", blockPeriod.Milliseconds(), "number", block.Number(), "hash", block.Hash())
 	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
 }
 
@@ -1484,6 +1498,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
 	return status, nil
 }
 
@@ -1822,6 +1837,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		blockWriteTimer.Update(time.Since(wstart) - statedb.AccountCommits - statedb.StorageCommits - statedb.SnapshotCommits - statedb.TrieDBCommits)
 		blockInsertTimer.UpdateSince(start)
 
+		// CHANGE(immutable): Record block metrics
+		blockPropagationTimer.Update(time.Since(time.Unix(int64(block.Time()), 0)))
+
 		// Report the import stats before returning the various results
 		stats.processed++
 		stats.usedGas += usedGas
@@ -2104,6 +2122,22 @@ func (bc *BlockChain) collectLogs(b *types.Block, removed bool) []*types.Log {
 // Note the new head block won't be processed here, callers need to handle it
 // externally.
 func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
+	// CHANGE(immutable): Add logging for 'potential' reorgs
+	if bc.chainConfig.IsReorgBlocked {
+		// This is not necessarily a reorg. It could be a future block that does not cause our old head to be reverted
+		// We track it for visibility. This is a path that often occurs when a node is syncing.
+		// An example such chain is as follows
+		// Old Chain: A -> B -> C -> D
+		// NewChain:  A -> B -> C -> D -> E -> F
+		// If such a chain is observed, it is considered a 'potential reorg'
+		log.Info("Potential Reorg detected",
+			"oldHead.Number", oldHead.Number.String(),
+			"newHead.Number", newHead.Number().String(),
+			"oldHead.Hash", oldHead.Hash().String(),
+			"newHead.Hash", newHead.Hash().String(),
+			"newHead.ParentHash", newHead.ParentHash().String())
+	}
+
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -2139,6 +2173,30 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
 	if newBlock == nil {
 		return errInvalidNewChain
 	}
+
+	// CHANGE(immutable): Logic to check if this is a reorg attempt
+	if bc.chainConfig.IsReorgBlocked {
+		// We allow 'forward-reorgs', i.e. where blocks from the further in the future can be appended
+		// to the chain, even if they don't follow the oldChain directly.
+		// By this point, we have reduced the lengths of the chains to a common ancestor. If they don't have a
+		// common ancestor after reducing to the same length, it means we are attempting to remove blocks from
+		// the original chain which is not allowed.
+		// An example chain that has reached this point is:
+		// oldChain: A -> B -> C -> D
+		// newChain: A -> B -> C -> E
+		if oldBlock.Hash() != newBlock.Hash() {
+			// Mark as a reorg for metrics and alerting. Although a reorg was technically prevented,
+			log.Error("Reorg detected",
+				"oldHead.Number", oldHead.Number.String(),
+				"newHead.Number", newHead.Number().String(),
+				"oldHead.Hash", oldHead.Hash().String(),
+				"newHead.Hash", newHead.Hash().String(),
+				"newHead.ParentHash", newHead.ParentHash().String())
+			blockReorgMeter.Mark(1)
+			return ErrReorgAttempted
+		}
+	}
+
 	// Both sides of the reorg are at the same number, reduce both until the common
 	// ancestor is found
 	for {

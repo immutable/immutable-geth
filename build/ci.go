@@ -310,9 +310,9 @@ func doTest(cmdline []string) {
 	// Enable integration-tests
 	gotest.Args = append(gotest.Args, "-tags=integrationtests")
 
-	// Test a single package at a time. CI builders are slow
-	// and some tests run into timeouts under load.
-	gotest.Args = append(gotest.Args, "-p", "1")
+	// CHANGE(immutable): update flags for CI workflow
+	// Use -p for pkg parallelism and --parallel for test func parallelism.
+	gotest.Args = append(gotest.Args, "-p", "1", "--parallel", "4")
 	if *coverage {
 		gotest.Args = append(gotest.Args, "-covermode=atomic", "-cover")
 	}

@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/immutable/accesscontrol"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
@@ -135,6 +136,9 @@ type Config struct {
 	GlobalQueue  uint64 // Maximum number of non-executable transaction slots for all accounts
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
+
+	// CHANGE(immutable): Added access controllers filepaths for blocklist
+	BlockListFilePaths []string `toml:",omitempty"`
 }
 
 // DefaultConfig contains the default configurations for the transaction pool.
@@ -151,6 +155,9 @@ var DefaultConfig = Config{
 	GlobalQueue:  1024,
 
 	Lifetime: 3 * time.Hour,
+
+	// CHANGE(immutable): Added access controllers filepaths for blocklist
+	BlockListFilePaths: []string{},
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -188,6 +195,14 @@ func (config *Config) sanitize() Config {
 	if conf.Lifetime < 1 {
 		log.Warn("Sanitizing invalid txpool lifetime", "provided", conf.Lifetime, "updated", DefaultConfig.Lifetime)
 		conf.Lifetime = DefaultConfig.Lifetime
+	}
+	// CHANGE(immutable): Ensure each file in BlockListFiles exists
+	for _, filePath := range config.BlockListFilePaths {
+		if err := txpool.EnsureFileCanBeRead(filePath); err != nil {
+			log.Warn("Sanitizing invalid txpool block list filepaths", err.Error(), "provided", conf.BlockListFilePaths, "updated", DefaultConfig.BlockListFilePaths)
+			conf.BlockListFilePaths = DefaultConfig.BlockListFilePaths
+			break
+		}
 	}
 	return conf
 }
@@ -231,6 +246,9 @@ type LegacyPool struct {
 	initDoneCh      chan struct{}  // is closed once the pool is initialized (for tests)
 
 	changesSinceReorg int // A counter for how many drops we've performed in-between reorg.
+
+	// CHANGE(immutable): Added a list of access controllers to legacy pool
+	accessControllers []txpool.AccessController // List of access controllers that determines whether a sender is allowed to perform a tx
 }
 
 type txpoolResetRequest struct {
@@ -259,6 +277,8 @@ func New(config Config, chain BlockChain) *LegacyPool {
 		reorgDoneCh:     make(chan chan struct{}),
 		reorgShutdownCh: make(chan struct{}),
 		initDoneCh:      make(chan struct{}),
+		// CHANGE(immutable): Added a list of access controllers to legacy pool
+		accessControllers: []txpool.AccessController{},
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -282,6 +302,34 @@ func (pool *LegacyPool) Filter(tx *types.Transaction) bool {
 	default:
 		return false
 	}
+}
+
+// FilterWithError
+// CHANGE(immutable):
+// Exclude transactions that are not valid based on access control structure
+func (pool *LegacyPool) FilterWithError(tx *types.Transaction) error {
+	if !pool.Filter(tx) {
+		return core.ErrTxTypeNotSupported
+	}
+	from, err := types.Sender(pool.signer, tx)
+	if err != nil {
+		return txpool.ErrInvalidSender
+	}
+
+	if len(pool.accessControllers) == 0 {
+		// No access controllers, allow the transaction to pass
+		return nil
+	}
+
+	// Check for every access controllers that this transaction is allowed to go through
+	for _, accessControl := range pool.accessControllers {
+		if !accessControl.IsAllowed(from, tx) {
+			log.Warn("Transaction is not allowed by access control", "from", from, "tx", tx.Hash(), "isBlockList", accessControl.IsBlocklist())
+			// If any access control doesn't allow
+			return txpool.ErrTxIsUnauthorized
+		}
+	}
+	return nil
 }
 
 // Init sets the gas price needed to keep a transaction in the pool and the chain
@@ -323,6 +371,18 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 			log.Warn("Failed to rotate transaction journal", "err", err)
 		}
 	}
+
+	// CHANGE(immutable): Initialize accessControllers on pool based on pool acls config
+	acls := []txpool.AccessController{}
+	if len(pool.config.BlockListFilePaths) > 0 {
+		blockListACL, err := accesscontrol.New(pool.config.BlockListFilePaths, false)
+		if err != nil {
+			return err
+		}
+		acls = append(acls, blockListACL)
+	}
+	pool.accessControllers = acls
+
 	pool.wg.Add(1)
 	go pool.loop()
 	return nil
@@ -613,7 +673,8 @@ func (pool *LegacyPool) validateTxBasics(tx *types.Transaction, local bool) erro
 		MaxSize: txMaxSize,
 		MinTip:  pool.gasTip.Load().ToBig(),
 	}
-	if local {
+	// CHANGE(immutable): check if NoLocals has been set to reject underpriced transactions
+	if local && !pool.config.NoLocals {
 		opts.MinTip = new(big.Int)
 	}
 	if err := txpool.ValidateTransaction(tx, pool.currentHead.Load(), pool.signer, opts); err != nil {
@@ -998,6 +1059,7 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, local, sync bool) []error 
 			invalidTxMeter.Mark(1)
 			continue
 		}
+
 		// Accumulate all unknown transactions for deeper processing
 		news = append(news, tx)
 	}
@@ -1318,6 +1380,19 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 
 	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
 	pool.changesSinceReorg = 0 // Reset change counter
+
+	// CHANGE(immutable): Get the list of pending transactions and add them to a rebroadcast list
+	// Pending transactions are those that could be included in a block successfully, as opposed to the
+	// queued transactions which are not ready to be included in a block. Only pending transactions are
+	// rebroadcast to avoid making the network too noisy. We only want to rebroadcast on a new block
+	// hence, we check if reset is nil. Reset will be non-nil if a new block was received.
+	rebroadcastList := make([]types.Transactions, 0, len(pool.pending))
+	if reset != nil {
+		for _, txs := range pool.pending {
+			rebroadcastList = append(rebroadcastList, txs.Flatten())
+		}
+	}
+
 	pool.mu.Unlock()
 
 	// Notify subsystems for newly added transactions
@@ -1328,12 +1403,29 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 		}
 		events[addr].Put(tx)
 	}
-	if len(events) > 0 {
-		var txs []*types.Transaction
-		for _, set := range events {
-			txs = append(txs, set.Flatten()...)
+
+	// CHANGE(immutable): deduplicate the broadcast lists so that transactions are not broadcast multiple times
+	// at the same time.
+	uniqueTxs := make(map[common.Hash]*types.Transaction)
+	for _, set := range events {
+		for _, tx := range set.Flatten() {
+			uniqueTxs[tx.Hash()] = tx
 		}
-		pool.txFeed.Send(core.NewTxsEvent{Txs: txs})
+	}
+	for _, set := range rebroadcastList {
+		for _, tx := range set {
+			uniqueTxs[tx.Hash()] = tx
+		}
+	}
+	var txs []*types.Transaction
+	for _, tx := range uniqueTxs {
+		txs = append(txs, tx)
+	}
+
+	if len(txs) > 0 {
+		if numSubscribers := pool.txFeed.Send(core.NewTxsEvent{Txs: txs}); numSubscribers == 0 {
+			log.Warn("Transaction pool is not being rebroadcast to any subscribers")
+		}
 	}
 }
 

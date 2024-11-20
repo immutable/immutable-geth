@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/triedb"
 )
@@ -56,6 +57,9 @@ var (
 	fsHeaderSafetyNet = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderContCheck = 3 * time.Second // Time interval to check for header continuations during state download
 	fsMinFullBlocks   = 64              // Number of blocks to retrieve fully even in snap sync
+
+	// CHANGE(immutable): Add metrics
+	syncDurationTimer = metrics.NewRegisteredTimer("downloader/sync", nil)
 )
 
 var (
@@ -472,6 +476,8 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	}
 	defer func(start time.Time) {
 		log.Debug("Synchronisation terminated", "elapsed", common.PrettyDuration(time.Since(start)))
+		// CHANGE(immutable): Record sync duration metric
+		syncDurationTimer.Update(time.Since(start))
 	}(time.Now())
 
 	// Look up the sync boundaries: the common ancestor and the target block

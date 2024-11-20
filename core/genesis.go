@@ -210,6 +210,9 @@ func (e *GenesisMismatchError) Error() string {
 type ChainOverrides struct {
 	OverrideCancun *uint64
 	OverrideVerkle *uint64
+	// CHANGE(immutable): Add Prevrandao and Shanghai overrides
+	OverridePrevrandao *uint64
+	OverrideShanghai   *uint64
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -240,6 +243,14 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			}
 			if overrides != nil && overrides.OverrideVerkle != nil {
 				config.VerkleTime = overrides.OverrideVerkle
+			}
+			// CHANGE(immutable): Add Prevrandao override
+			if overrides != nil && overrides.OverridePrevrandao != nil {
+				config.PrevrandaoTime = overrides.OverridePrevrandao
+			}
+			// CHANGE(immutable): Add Shanghai override
+			if overrides != nil && overrides.OverrideShanghai != nil {
+				config.ShanghaiTime = overrides.OverrideShanghai
 			}
 		}
 	}

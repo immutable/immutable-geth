@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -105,6 +106,10 @@ var (
 	txFetcherQueueingHashes = metrics.NewRegisteredGauge("eth/fetcher/transaction/queueing/hashes", nil)
 	txFetcherFetchingPeers  = metrics.NewRegisteredGauge("eth/fetcher/transaction/fetching/peers", nil)
 	txFetcherFetchingHashes = metrics.NewRegisteredGauge("eth/fetcher/transaction/fetching/hashes", nil)
+
+	// CHANGE(immutable): Add metric for tx pool overflow as alert condition. Metric alerting is preffered
+	// over log alerting https://immutable.atlassian.net/wiki/spaces/SRE/pages/2184086495/Newrelic+Data+Types+-+What+and+When+to+use
+	txPoolOverflowCounter = metrics.NewRegisteredCounter("eth/fetcher/transaction/txpool/overflow", nil)
 )
 
 // txAnnounce is the notification of the availability of a batch
@@ -351,6 +356,17 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 				otherreject++
 			}
 			added = append(added, batch[j].Hash())
+
+			// CHANGE(immutable) add tx pool logging and metrics, this includes user errors but can also
+			// indicate other system level errors.
+			if err != nil {
+				if errors.Is(err, legacypool.ErrTxPoolOverflow) {
+					log.Error("tx pool overflow", "err", err, "tx", batch[j].Hash().String())
+					txPoolOverflowCounter.Inc(1)
+				} else {
+					log.Info("failed to add tx", "err", err, "tx", batch[j].Hash().String())
+				}
+			}
 			metas = append(metas, txMetadata{
 				kind: batch[j].Type(),
 				size: uint32(batch[j].Size()),

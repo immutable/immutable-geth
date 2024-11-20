@@ -1,0 +1,168 @@
+title: "immutable-geth - go-ethereum fork diff overview"
+footer: |
+  Fork-diff overview of [`immutable-geth`](https://github.com/immutable/geth), a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum).
+base:
+  name: go-ethereum
+  url: https://github.com/ethereum/go-ethereum
+  ref: refs/tags/v1.13.15
+fork:
+  name: immutable-geth
+  url: https://github.com/immutable/go-ethereum
+  ref: refs/tags/audit.1
+def:
+  title: "immutable-geth"
+  description: |
+    All modifications made by Immutable to the go-ethereum codebase are listed here.
+    The diff is based on the `v1.13.15` tag of go-ethereum and the `audit.1` tag of immutable-geth.
+  sub:
+    # Uncomment these to pull the diffs out of the main pkg sections
+    #- title: "Priority Diffs"
+    #  description: This section contains prioritized for the purposes of security analysis
+    #  globs:
+    #    - "core/blockchain.go"
+    #    - "core/evm.go"
+    #    - "core/state_processor.go"
+    #    - "core/types/block.go"
+    #    - "core/txpool/validation.go"
+    #    - "core/txpool/immutable/accesscontrol/contract_creation_controller.go"
+    #    - "core/txpool/immutable/accesscontrol/controller.go"
+    #    - "core/txpool/immutable/accesscontrol/sdn_provider.go"
+    #    - "core/txpool/legacypool/legacypool.go"
+    #    - "core/txpool/txpool.go"
+    #    - "params/config.go"
+    #    - "params/protocol_params.go"
+    #    - "node/api.go"
+    #    - "node/immutable_newrelic.go"
+    #    - "node/node.go"
+    #    - "node/rpcstack.go"
+    #    - "consensus/clique/clique.go"
+    #    - "miner/worker.go"
+    #    - "cmd/geth/config.go"
+    #    - "cmd/immutable/remote/aws/secretsmanager.go"
+    - title: "Go Source Changes"
+      description: This section contains diffs organized by each root Go pkg of the repository.
+      sub:
+        - title: "core"
+          description: ""
+          sub:
+            - title: "Reorg Invariant"
+              globs:
+                - "core/blockchain.go"
+            - title: "Immutable Genesis / Forks"
+              globs:
+                - "core/genesis.go"
+                - "core/immutable_genesis.go"
+                - "core/evm.go"
+                - "core/gen_genesis.go"
+                - "core/forkid/forkid.go"
+            - title: "Blobs"
+              globs:
+                - "core/txpool/blobpool/blobpool.go"
+                - "core/txpool/blobpool/limbo.go"
+                - "core/txpool/validation.go"
+                - "core/state_processor.go"
+            - title: "ACL"
+              globs:
+                - "core/**/accesscontrol/**/*.go"
+                - "core/txpool/errors.go"
+                - "core/txpool/legacypool/legacypool.go"
+                - "core/txpool/subpool.go"
+                - "core/txpool/txpool.go"
+                - "core/txpool/immutable_access_controller.go"
+          globs:
+            - "core/**/*.go"
+        - title: "node"
+          description: ""
+          sub:
+            - title: "New Relic"
+              globs:
+                - "node/api.go"
+                - "node/immutable_newrelic.go"
+                - "node/node.go"
+            - title: "RPC"
+              globs:
+                - "node/rpcstack.go"
+                - "node/defaults.go"
+                - "node/config.go"
+          globs:
+            - "node/**/*.go"
+        - title: "consensus"
+          description: ""
+          globs:
+            - "consensus/**/*.go"
+        - title: "miner"
+          description: ""
+          globs:
+            - "miner/**/*.go"
+        - title: "common"
+          description: ""
+          globs:
+            - "common/**/*.go"
+        - title: "internal"
+          description: ""
+          globs:
+            - "internal/**/*.go"
+        - title: "cmd"
+          description: ""
+          sub:
+            - title: "Bootstrap"
+              description: "Logic for bootstrapping Immutable geth instances both locally and inside K8s pods"
+              globs:
+                - "cmd/geth/immutable.go"
+                - "cmd/geth/immutable/**/*.go"
+                - "cmd/**/immutable_*.go"
+                - "cmd/immutable/*.go"
+            - title: "Sequencer"
+              globs:
+                - "cmd/geth/config.go"
+                - "cmd/immutable/remote/aws/**/*.go"
+          globs:
+            - "cmd/**/*.go"
+        - title: "accounts"
+          description: ""
+          globs:
+            - "accounts/**/*.go"
+        - title: "p2p"
+          description: ""
+          globs:
+            - "p2p/**/*.go"
+        - title: "eth"
+          description: ""
+          globs:
+            - "eth/**/*.go"
+            - "internal/ethapi/api.go"
+        - title: "params"
+          description: ""
+          globs:
+            - "params/**/*.go"
+        - title: "ethclient"
+          description: ""
+          globs:
+            - "ethclient/gethclient/immutable_gethclient.go"
+        - title: "e2e"
+          description: "E2E test suite for Immutable geth"
+          globs:
+            - "tests/immutable/**/*"
+    - title: "Configurations"
+      description: Miscellaneous configuration files for Immutable geth.
+      globs:
+        - "**/genesis/**.json"
+        - "immutable/**/*.toml"
+
+# ignored globally, does not count towards line count
+ignore:
+  - "**/*_test.go"
+  - "tests/state_test_util.go"
+  - "**/testdata/**"
+  - "**/*t8ntool/*.go"
+  - ".circleci/*"
+  - "deployment/**/*"
+  - "*.sum"
+  - "go.mod"
+  - "fork.yaml"
+  - "Makefile"
+  - ".golangci.yml"
+  - ".github/**"
+  - "**/*.gob" # data asset, not code
+  - "core/vm/testdata/precompiles/p256Verify.json" # data asset, not code
+  - "eth/tracers/internal/tracetest/testdata/**/*.json"

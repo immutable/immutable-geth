@@ -207,7 +207,12 @@ func (ln *LocalNode) SetFallbackIP(ip net.IP) {
 func (ln *LocalNode) SetFallbackUDP(port int) {
 	ln.mu.Lock()
 	defer ln.mu.Unlock()
-
+	// CHANGE(immutable): handle overflow case.
+	// Where 65535 is the maximum uint16 value (https://go.dev/src/builtin/builtin.go).
+	if port > 65535 {
+		log.Warn("port overflow, setting to 65535", "port", port)
+		port = 65535
+	}
 	ln.endpoint4.fallbackUDP = uint16(port)
 	ln.endpoint6.fallbackUDP = uint16(port)
 	ln.updateEndpoints()

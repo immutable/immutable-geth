@@ -200,6 +200,13 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 			rejectedTxs = append(rejectedTxs, &rejectedTx{i, err.Error()})
 			continue
 		}
+		// CHANGE(immutable): Reject blob transactions.
+		if chainConfig.IsImmutableZKEVM() && tx.Type() == types.BlobTxType {
+			errMsg := "blob tx not allowed"
+			log.Warn("rejected blob tx", "index", i, "hash", tx.Hash(), "error", errMsg)
+			rejectedTxs = append(rejectedTxs, &rejectedTx{i, errMsg})
+			continue
+		}
 		if tx.Type() == types.BlobTxType && vmContext.BlobBaseFee == nil {
 			errMsg := "blob tx used but field env.ExcessBlobGas missing"
 			log.Warn("rejected tx", "index", i, "hash", tx.Hash(), "error", errMsg)

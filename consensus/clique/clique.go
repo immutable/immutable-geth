@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -68,6 +69,8 @@ var (
 
 	diffInTurn = big.NewInt(2) // Block difficulty for in-turn signatures
 	diffNoTurn = big.NewInt(1) // Block difficulty for out-of-turn signatures
+
+	ErrWithdrawalsDetected = errors.New("withdrawals have been passed to consensus layer")
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -299,24 +302,20 @@ func (c *Clique) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 	if header.GasLimit > params.MaxGasLimit {
 		return fmt.Errorf("invalid gasLimit: have %v, max %v", header.GasLimit, params.MaxGasLimit)
 	}
-	if chain.Config().IsShanghai(header.Number, header.Time) {
-		return errors.New("clique does not support shanghai fork")
-	}
+	// CHANGE(immutable): Allow Shanghai
 	// Verify the non-existence of withdrawalsHash.
-	if header.WithdrawalsHash != nil {
-		return fmt.Errorf("invalid withdrawalsHash: have %x, expected nil", header.WithdrawalsHash)
+	// Before Cancun, withdrawalsHash must be nil. After Cancun, it must be EmptyWithdrawalsHash
+	isCancun := chain.Config().IsCancun(header.Number, header.Time)
+	if !isCancun && header.WithdrawalsHash != nil {
+		return fmt.Errorf("invalid withdrawalsHash: have %x, expected nil before Cancun", header.WithdrawalsHash)
 	}
-	if chain.Config().IsCancun(header.Number, header.Time) {
-		return errors.New("clique does not support cancun fork")
-	}
-	// Verify the non-existence of cancun-specific header fields
-	switch {
-	case header.ExcessBlobGas != nil:
-		return fmt.Errorf("invalid excessBlobGas: have %d, expected nil", header.ExcessBlobGas)
-	case header.BlobGasUsed != nil:
-		return fmt.Errorf("invalid blobGasUsed: have %d, expected nil", header.BlobGasUsed)
-	case header.ParentBeaconRoot != nil:
-		return fmt.Errorf("invalid parentBeaconRoot, have %#x, expected nil", header.ParentBeaconRoot)
+	if isCancun {
+		if header.WithdrawalsHash == nil {
+			return fmt.Errorf("invalid withdrawalsHash: nil, expected EmptyWithdrawalsHash after Cancun")
+		}
+		if *header.WithdrawalsHash != types.EmptyWithdrawalsHash {
+			return fmt.Errorf("invalid withdrawalsHash: have %x, expected EmptyWithdrawalsHash after Cancun", header.WithdrawalsHash)
+		}
 	}
 	// All basic checks passed, verify cascading fields
 	return c.verifyCascadingFields(chain, header, parents)
@@ -361,6 +360,32 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainHeaderReader, header
 		// Verify the header's EIP-1559 attributes.
 		return err
 	}
+
+	// CHANGE(immutable): Allow Cancun
+	isCancun := chain.Config().IsCancun(header.Number, header.Time)
+	if isCancun {
+		// Perform default verification to ensure we are consistent
+		if err := eip4844.VerifyEIP4844Header(parent, header); err != nil {
+			return err
+		}
+		// Immutable zkEVM should have 0 values for all headers.
+		// VerifyEIP4844Header has checked that Blob fields are non nil,
+		// hence at this point we know they are not nil
+		if err := enforceCancunHeaderInvariants(header); err != nil {
+			return err
+		}
+	} else {
+		// If the chain is not Cancun, we expect fields to be nil
+		switch {
+		case header.ExcessBlobGas != nil:
+			return fmt.Errorf("invalid excessBlobGas: have %d, expected nil", header.ExcessBlobGas)
+		case header.BlobGasUsed != nil:
+			return fmt.Errorf("invalid blobGasUsed: have %d, expected nil", header.BlobGasUsed)
+		case header.ParentBeaconRoot != nil:
+			return fmt.Errorf("invalid parentBeaconRoot, have %#x, expected nil", header.ParentBeaconRoot)
+		}
+	}
+
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
@@ -587,9 +612,24 @@ func (c *Clique) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
 func (c *Clique) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, withdrawals []*types.Withdrawal) (*types.Block, error) {
-	if len(withdrawals) > 0 {
-		return nil, errors.New("clique does not support withdrawals")
+	// CHANGE(immutable): Withdrawals should not be passed in here.
+	if withdrawals != nil {
+		log.Warn("Withdrawals passed to consensus layer", "block number", header.Number.String())
 	}
+	// CHANGE(immutable): Handle various forks.
+	// The order of the forks in the switch statement matters - based on fork order.
+	switch {
+	case chain.Config().IsCancun(header.Number, header.Time):
+		// Withdrawals should exist but be empty
+		withdrawals = make([]*types.Withdrawal, 0)
+	case chain.Config().IsImmutableZKEVMPrevrandao(header.Time):
+		withdrawals = nil
+	case chain.Config().IsShanghai(header.Number, header.Time):
+		withdrawals = nil
+	default:
+		withdrawals = nil
+	}
+
 	// Finalize block
 	c.Finalize(chain, header, state, txs, uncles, nil)
 
@@ -597,7 +637,8 @@ func (c *Clique) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Assemble and return the final block for sealing.
-	return types.NewBlock(header, txs, nil, receipts, trie.NewStackTrie(nil)), nil
+	// CHANGE(immutable): Use NewBlockWithWithdrawals so that the WithdrawalsHash is appropriately set
+	return types.NewBlockWithWithdrawals(header, txs, nil, receipts, withdrawals, trie.NewStackTrie(nil)), nil
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
@@ -655,6 +696,15 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 
 		log.Trace("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
 	}
+	// CHANGE(immutable): Allow Cancun. We do this check in Seal as an extra sanity check so that blocks are halted from
+	// being propagated to peers to insulate them potential issues.
+	isCancun := chain.Config().IsCancun(header.Number, header.Time)
+	if isCancun {
+		if err := enforceCancunHeaderInvariants(header); err != nil {
+			log.Error("Failed to Seal block due to failed header invariants", "err", err)
+			return err
+		}
+	}
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeClique, CliqueRLP(header))
 	if err != nil {
@@ -666,12 +716,16 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 	go func() {
 		select {
 		case <-stop:
+			// CHANAGE(immutable): log interrupt
+			log.Info("interrupted on clique seal", "block number", header.Number.String())
 			return
 		case <-time.After(delay):
 		}
 
 		select {
 		case results <- block.WithSeal(header):
+			// CHANGE(immutable): log seal success
+			log.Info("Sealed new block in clique", "block number", header.Number.String())
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", SealHash(header))
 		}
@@ -763,19 +817,60 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	if header.BaseFee != nil {
 		enc = append(enc, header.BaseFee)
 	}
+	// CHANGE(immutable): Allow Shanghai
 	if header.WithdrawalsHash != nil {
-		panic("unexpected withdrawal hash value in clique")
+		// CHANGE(immutable): Post-Cancun blocks will have a non-nil WithdrawalsHash set to EmptyWithdrawalsHash
+		if *header.WithdrawalsHash != types.EmptyWithdrawalsHash {
+			panic(fmt.Sprintf("withdrawalsHash (%x) should be EmptyWithdrawalsHash", *header.WithdrawalsHash))
+		}
+		enc = append(enc, *header.WithdrawalsHash)
 	}
 	if header.ExcessBlobGas != nil {
-		panic("unexpected excess blob gas value in clique")
+		// CHANGE(immutable): Allow Cancun
+		if *header.ExcessBlobGas != 0 {
+			panic(fmt.Sprintf("excessBlobGas (%d) should be 0", *header.ExcessBlobGas))
+		}
+		enc = append(enc, *header.ExcessBlobGas)
 	}
 	if header.BlobGasUsed != nil {
-		panic("unexpected blob gas used value in clique")
+		// CHANGE(immutable): Allow Cancun
+		if *header.BlobGasUsed != 0 {
+			panic(fmt.Sprintf("blobGasUsed (%d) should be 0", *header.BlobGasUsed))
+		}
+		enc = append(enc, *header.BlobGasUsed)
 	}
 	if header.ParentBeaconRoot != nil {
-		panic("unexpected parent beacon root value in clique")
+		// CHANGE(immutable): Allow Cancun
+		if *header.ParentBeaconRoot != common.MinHash {
+			panic(fmt.Sprintf("parentBeaconRoot (%x) should be 0x0", *header.ParentBeaconRoot))
+		}
+		enc = append(enc, *header.ParentBeaconRoot)
 	}
 	if err := rlp.Encode(w, enc); err != nil {
 		panic("can't encode: " + err.Error())
 	}
+}
+
+// CHANGE(immutable): In post-merge networks, the ParentBeaconRoot is verified by the consensus client
+// and propagated to the Execution Client. However, in a Pre-merge network, there is no existing mechanism to verify
+// that it is correct. Therefore, we enforce that it is always set to 0x0. We also disable blobs and hence enforce
+// their absence here.
+func enforceCancunHeaderInvariants(header *types.Header) error {
+	// These should never be nil given that it is checked in other areas but is added here for completeness
+	if header.ParentBeaconRoot == nil || header.BlobGasUsed == nil || header.ExcessBlobGas == nil {
+		return fmt.Errorf("invalid header with nil values: %v, %v, %v",
+			header.ParentBeaconRoot,
+			header.BlobGasUsed,
+			header.ExcessBlobGas)
+	}
+	if *header.BlobGasUsed != 0 {
+		return fmt.Errorf("invalid BlobGasUsed: have %d, expected 0", *header.BlobGasUsed)
+	}
+	if *header.ExcessBlobGas != 0 {
+		return fmt.Errorf("invalid ExcessBlobGas: have %d, expected 0", *header.ExcessBlobGas)
+	}
+	if header.ParentBeaconRoot.Cmp(common.MinHash) != 0 {
+		return fmt.Errorf("invalid parentBeaconRoot, have %#x, expected zero hash", header.ParentBeaconRoot)
+	}
+	return nil
 }

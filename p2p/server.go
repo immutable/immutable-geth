@@ -766,7 +766,8 @@ running:
 				// The handshakes are done and it passed all checks.
 				p := srv.launchPeer(c)
 				peers[c.node.ID()] = p
-				srv.log.Debug("Adding p2p peer", "peercount", len(peers), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+				// CHANGE(immutable): log fullname
+				srv.log.Debug("Adding p2p peer", "peercount", len(peers), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Fullname())
 				srv.dialsched.peerAdded(c)
 				if p.Inbound() {
 					inboundCount++
@@ -916,6 +917,12 @@ func (srv *Server) checkInboundConn(remoteIP net.IP) error {
 	if srv.NetRestrict != nil && !srv.NetRestrict.Contains(remoteIP) {
 		return errors.New("not in netrestrict list")
 	}
+
+	// CHANGE(immutable): Do not rate limit connections that match on NetRestrict
+	if srv.NetRestrict != nil && srv.NetRestrict.Contains(remoteIP) {
+		return nil
+	}
+
 	// Reject Internet peers that try too often.
 	now := srv.clock.Now()
 	srv.inboundHistory.expire(now, nil)

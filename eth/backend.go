@@ -18,11 +18,13 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -101,6 +103,9 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
+
+	// CHANGE(immutable): Add RPC client for forwarding to Immutable RPC.
+	rpcProxyClient *rpc.Client
 }
 
 // New creates a new Ethereum object (including the
@@ -213,6 +218,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideVerkle != nil {
 		overrides.OverrideVerkle = config.OverrideVerkle
 	}
+	// CHANGE(immutable): Add Prevrandao and Shanghai overrides
+	if config.OverridePrevrandao != nil {
+		overrides.OverridePrevrandao = config.OverridePrevrandao
+	}
+	if config.OverrideShanghai != nil {
+		overrides.OverrideShanghai = config.OverrideShanghai
+	}
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
@@ -245,6 +257,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		BloomCache:     uint64(cacheLimit),
 		EventMux:       eth.eventMux,
 		RequiredBlocks: config.RequiredBlocks,
+		// CHANGE(immutable): gossip configuration
+		GossipDefault: config.GossipDefault,
+		// CHANGE(immutable): disable txpool gossip configuration
+		DisableTxPoolGossip: config.DisableTxPoolGossip,
 	}); err != nil {
 		return nil, err
 	}
@@ -271,6 +287,17 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.snapDialCandidates, err = dnsclient.NewIterator(eth.config.SnapDiscoveryURLs...)
 	if err != nil {
 		return nil, err
+	}
+
+	// CHANGE(immutable): Handle immutable RPC client.
+	if config.RPCProxyURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		client, err := rpc.DialContext(ctx, config.RPCProxyURL)
+		if err != nil {
+			return nil, err
+		}
+		eth.rpcProxyClient = client
 	}
 
 	// Start the RPC service
@@ -332,8 +359,7 @@ func (s *Ethereum) APIs() []rpc.API {
 		}, {
 			Namespace: "net",
 			Service:   s.netRPCService,
-		},
-	}...)
+		}}...)
 }
 
 func (s *Ethereum) ResetWithGenesisBlock(gb *types.Block) {
@@ -547,6 +573,11 @@ func (s *Ethereum) Stop() error {
 
 	s.chainDb.Close()
 	s.eventMux.Stop()
+
+	// CHANGE(immutable): Handle shutdown of client.
+	if s.rpcProxyClient != nil {
+		s.rpcProxyClient.Close()
+	}
 
 	return nil
 }

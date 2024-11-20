@@ -339,6 +339,15 @@ func (p *BlobPool) Filter(tx *types.Transaction) bool {
 	return tx.Type() == types.BlobTxType
 }
 
+// FilterWithError returns error or nil whether the given transaction can be consumed by the blob pool.
+// CHANGE(immutable): extended filter to use filter with error function to allow access control per tx
+func (p *BlobPool) FilterWithError(tx *types.Transaction) error {
+	if !p.Filter(tx) {
+		return core.ErrTxTypeNotSupported
+	}
+	return nil
+}
+
 // Init sets the gas price needed to keep a transaction in the pool and the chain
 // head to allow balance / nonce checks. The transaction journal will be loaded
 // from disk and filtered based on the provided starting settings.

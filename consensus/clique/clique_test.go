@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/stretchr/testify/require"
 )
 
 // This test case is a repro of an annoying bug that took us forever to catch.
@@ -123,3 +124,55 @@ func TestSealHash(t *testing.T) {
 		t.Errorf("have %x, want %x", have, want)
 	}
 }
+
+func TestImmutableEnforceCancunHeaderInvariants_NonZeroParentBeaconRoot_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: &common.MaxHash, BlobGasUsed: newUint64(0), ExcessBlobGas: newUint64(0)}
+	err := enforceCancunHeaderInvariants(header)
+	require.EqualError(t, err, "invalid parentBeaconRoot, have 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, expected zero hash")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_NonZeroBlobGasUsed_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: &common.MinHash, BlobGasUsed: newUint64(1), ExcessBlobGas: newUint64(0)}
+	err := enforceCancunHeaderInvariants(header)
+	require.EqualError(t, err, "invalid BlobGasUsed: have 1, expected 0")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_NonZeroExcessBlobGas_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: &common.MinHash, BlobGasUsed: newUint64(0), ExcessBlobGas: newUint64(1)}
+	err := enforceCancunHeaderInvariants(header)
+	require.EqualError(t, err, "invalid ExcessBlobGas: have 1, expected 0")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_NilParentBeaconRoot_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: nil, BlobGasUsed: newUint64(0), ExcessBlobGas: newUint64(0)}
+	err := enforceCancunHeaderInvariants(header)
+	require.ErrorContains(t, err, "invalid header with nil values")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_NilBlobGasUsed_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: &common.MaxHash, BlobGasUsed: nil, ExcessBlobGas: newUint64(0)}
+	err := enforceCancunHeaderInvariants(header)
+	require.ErrorContains(t, err, "invalid header with nil values")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_NilExcessBlobGas_ReturnsError(t *testing.T) {
+	header := &types.Header{ParentBeaconRoot: &common.MinHash, BlobGasUsed: newUint64(0), ExcessBlobGas: nil}
+	err := enforceCancunHeaderInvariants(header)
+	require.ErrorContains(t, err, "invalid header with nil values")
+}
+
+func TestImmutableEnforceCancunHeaderInvariants_ValidValues_ReturnsNil(t *testing.T) {
+	validA := common.HexToHash("0x0")
+	validB := common.Hash{}
+	validC := common.BigToHash(big.NewInt(0))
+	validD := common.MinHash
+
+	validHashes := []common.Hash{validA, validB, validC, validD}
+	for _, h := range validHashes {
+		header := &types.Header{ParentBeaconRoot: &h, BlobGasUsed: newUint64(0), ExcessBlobGas: newUint64(0)}
+		err := enforceCancunHeaderInvariants(header)
+		require.NoError(t, err)
+	}
+}
+
+func newUint64(val uint64) *uint64 { return &val }

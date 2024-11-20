@@ -1,0 +1,9 @@
+[
+	{
+		"type": "function",
+		"name": "selfDestruct",
+		"inputs": [{ "name": "recipient", "type": "address", "internalType": "address" }],
+		"outputs": [],
+		"stateMutability": "nonpayable"
+	}
+]
