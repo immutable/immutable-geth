@@ -1,13 +1,13 @@
 title: "immutable-geth - go-ethereum fork diff overview"
 footer: |
-  Fork-diff overview of [`immutable-geth`](https://github.com/immutable/geth), a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum).
+  Fork-diff overview of [`immutable-geth`](https://github.com/immutable/immutable-geth), a fork of [`go-ethereum`](https://github.com/ethereum/go-ethereum).
 base:
   name: go-ethereum
   url: https://github.com/ethereum/go-ethereum
   ref: refs/tags/v1.13.15
 fork:
   name: immutable-geth
-  url: https://github.com/immutable/go-ethereum
+  url: https://github.com/immutable/immutable-geth
   ref: refs/tags/audit.1
 def:
   title: "immutable-geth"
