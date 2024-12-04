@@ -47,8 +47,6 @@ func newRelicMiddleware(nrApp *newrelic.Application, next http.Handler) http.Han
 		txn := newrelic.FromContext(req.Context())
 		txn.AddAttribute("x-api-key", req.Header.Get("x-api-key"))
 
-		// Capture ethAddress from headers in order to monitor usage and errors
-		txn.AddAttribute("x-imx-eth-address", req.Header.Get("x-imx-eth-address"))
 		// Capture SDK version from headers in order to monitor usage and errors
 		txn.AddAttribute("x-sdk-version", req.Header.Get("x-sdk-version"))
 		txn.AddAttribute("x-forwarded-for", req.Header.Get("x-forwarded-for"))
