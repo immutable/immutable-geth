@@ -9,6 +9,7 @@ and this project adheres to
 ## [v1.0.0-beta.14]
 
 * Limit the number of bytes read by NR RPC middleware
+* Add fix [#30014](https://github.com/ethereum/go-ethereum/pull/30014) and [#30430](https://github.com/ethereum/go-ethereum/pull/30430) from upstream
 
 ## [v1.0.0-beta.13]
 
