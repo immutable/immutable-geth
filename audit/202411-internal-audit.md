@@ -23,7 +23,7 @@ Additionally, the audit will check that all relevant fixes from go-ethereum rele
 
 ### Diff File
 
-The souce code differences between the target of the audit and go-ethereum version 1.13.15 are available in this diff file: [forkdiff](https://fuzzy-adventure-4kry22m.pages.github.io/audit/202411-internal-audit/forkdiff.html). This file was generated using the commands:
+The souce code differences between the target of the audit and go-ethereum version 1.13.15 are available in this diff file: [forkdiff](https://immutable.github.io/immutable-geth/audit/202411-internal-audit/forkdiff.html). This file was generated using the commands:
 
 ```
 mkdir temp
