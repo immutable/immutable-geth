@@ -1,0 +1,52 @@
+---
+name: "Cache golangci-lint"
+description: "Cache golangci-lint and analysis cache"
+
+inputs:
+  cache-key-suffix:
+    description: Suffix to append to the cache key
+    required: false
+    default: ${{ github.sha }}
+  golangci-lint-version:
+    description: Golangci-lint version to use
+    required: false
+    default: v1.51.1
+  refresh-analysis-cache:
+    description: Flag to control if golangci-lint analysis cache needs to be refreshed
+    default: false
+runs:
+  using: "composite"
+  steps:
+    - name: Cache golangci-lint
+      uses: actions/cache@v3
+      id: cache-golangci-lint
+      with:
+        path: ~/go/bin/golangci-lint
+        key: ${{ runner.os }}-golangci-lint@${{ inputs.golangci-lint-version }}
+
+    - name: Install golangci-lint
+      if: steps.cache-golangci-lint.outputs.cache-hit != 'true'
+      shell: bash
+      run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@${{ inputs.golangci-lint-version }}
+
+    - name: Restore golangci-lint analysis cache
+      if: ${{ inputs.refresh-analysis-cache != 'true' }}
+      uses: actions/cache/restore@v3
+      with:
+        path: ~/.cache/golangci-lint
+        # This technique will make the cache key unique to the commit SHA,
+        # so that we can still hit cache using the restore-key and renew the cache using the key.
+        key: ${{ runner.os }}-golangci-lint-analysis-cache-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-golangci-lint-analysis-cache-
+
+    - name: Cache golangci-lint analysis cache
+      if: ${{ inputs.refresh-analysis-cache == 'true' }}
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/golangci-lint
+        # This technique will make the cache key unique to the commit SHA,
+        # so that we can still hit cache using the restore-key and renew the cache using the key.
+        key: ${{ runner.os }}-golangci-lint-analysis-cache-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-golangci-lint-analysis-cache-
