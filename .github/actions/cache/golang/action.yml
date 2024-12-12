@@ -1,0 +1,58 @@
+---
+name: "Restore cache Go build and mod files"
+description: "Restore cache Go build and mod files"
+
+inputs:
+  cache-key-suffix:
+    description: Suffix to append to the cache key
+    required: false
+    default: ${{ github.sha }}
+  refresh-go-cache:
+    description: Flag to control cache refresh
+    default: false
+runs:
+  using: "composite"
+  steps:
+    - name: Restore Go mod (pkg)
+      if: ${{ inputs.refresh-go-cache != 'true' }}
+      uses: actions/cache/restore@v3
+      with:
+        path: |          
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}
+          ${{ runner.os }}-gomod-
+
+    - name: Restore Go build (test)
+      if: ${{ inputs.refresh-go-cache != 'true' }}
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+          ~/.cache/go-build
+        key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}
+          ${{ runner.os }}-gobuild-
+
+    - name: Cache Go mod (pkg)
+      if: ${{ inputs.refresh-go-cache == 'true' }}
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}
+          ${{ runner.os }}-gomod-
+
+    - name: Cache Go build (test)
+      if: ${{ inputs.refresh-go-cache == 'true' }}
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+        key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}
+          ${{ runner.os }}-gobuild-

@@ -1,0 +1,76 @@
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches: master
+
+concurrency:
+  group: PR-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    name: Local E2E Tests
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - uses: ./.github/actions/bootstrap
+
+  rewind:
+    name: Rewind Chain Tests
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - uses: ./.github/actions/rewind
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # We need the full history to get the base commit in order to compute the diff in golanci-lint
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.20.x
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - name: Cache linter
+        uses: ./.github/actions/cache/golangci-lint
+      - name: Debug golangci-lint cache
+        run: |
+          golangci-lint cache status
+      - name: Lint
+        shell: bash
+        run: |
+          golangci-lint run \
+            --new-from-rev=${{ github.event.pull_request.base.sha || 'HEAD~'}} \
+            --concurrency=4 \
+            --out-format=github-actions \
+            --config .golangci.yml \
+            ./...
+
+  tests:
+    name: Unit Tests
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.20.x
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - name: All Tests
+        shell: bash
+        run: |
+          go run build/ci.go install
+          go test $(go list ./... | grep -v 'go-ethereum/tests/immutable') -p 1 --parallel 4 -timeout=30m

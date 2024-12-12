@@ -1,0 +1,19 @@
+---
+name: "Test chain rewind"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.20.x
+
+    - name: Build
+      shell: bash
+      run: |
+        make geth
+
+    - name: Test
+      shell: bash
+      run: ./.github/scripts/rewind_test.sh
