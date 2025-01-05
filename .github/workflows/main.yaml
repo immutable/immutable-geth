@@ -1,0 +1,43 @@
+name: Build docker image, tag and push
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: # see this: https://docs.github.com/en/actions/using-jobs/assigning-permissions-to-jobs
+  id-token: write # This is required for requesting the JWT
+  contents: write # This is required for actions/checkout
+
+jobs:
+  dev_docker_build_push:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    uses: immutable/im-shared-github-actions/.github/workflows/docker-build-tag-push.yml@v1.3.1
+    with:
+      environment: dev
+      dockerfile: "Dockerfile"
+      role-to-assume: "arn:aws:iam::783421985614:role/immutable-nonprod-docker-image-push"
+      role-session-name: "go-ethereum-immutable-nonprod-docker-image-push"
+      aws-region: "us-east-2"
+      go-mod-cache-path: "~/go/pkg/mod"
+      go-build-cache-path: "~/.cache/go-build"
+    secrets:
+      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.20.x
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - name: All Tests
+        shell: bash
+        run: |
+          go run build/ci.go install
+          go test $(go list ./... | grep -v 'go-ethereum/tests/immutable') -p 1 --parallel 4 -timeout=30m
