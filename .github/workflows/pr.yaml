@@ -10,10 +10,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dev_docker_build_push:
+  push:
     if: ${{ github.ref == 'refs/heads/main' }}
+    name: temporary
+    runs-on: ubuntu-20-04-4-cores
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: false
+          token: ${{ secrets.github-token }}
+          ref: ${{ inputs.git-release-tag }}
       - uses: ./.github/actions/push
         with:
           environment: dev
@@ -23,8 +31,8 @@ jobs:
           aws-region: "us-east-2"
           go-mod-cache-path: "~/go/pkg/mod"
           go-build-cache-path: "~/.cache/go-build"
-      secrets:
-        github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+    secrets:
+      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
 
   bootstrap:
     name: Local E2E Tests

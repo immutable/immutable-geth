@@ -48,7 +48,13 @@ jobs:
     name: "Testnet: Release"
     needs: [setup, dev_validate]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: false
+          token: ${{ secrets.github-token }}
+          ref: ${{ inputs.git-release-tag }}
       - uses: ./.github/actions/push
         with:
           environment: sandbox
@@ -60,8 +66,8 @@ jobs:
           push-git-tag: false
           git-release-tag: ${{ needs.setup.outputs.tag_name }}
           ghcr-semver-only-tag: false # prod release to deploy non-prefixed image
-      secrets:
-        github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+    secrets:
+      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
 
   sandbox_images:
     name: "Testnet: Rollout"
