@@ -47,19 +47,21 @@ jobs:
   sandbox_docker_build_push:
     name: "Testnet: Release"
     needs: [setup, dev_validate]
-    uses: ./.github/actions/push
-    with:
-      environment: sandbox
-      dockerfile: "Dockerfile"
-      role-to-assume: "arn:aws:iam::783421985614:role/immutable-nonprod-docker-image-push"
-      role-session-name: "go-ethereum-immutable-nonprod-docker-image-push"
-      aws-region: "us-east-2"
-      sandbox-semver: true
-      push-git-tag: false
-      git-release-tag: ${{ needs.setup.outputs.tag_name }}
-      ghcr-semver-only-tag: false # prod release to deploy non-prefixed image
-    secrets:
-      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/push
+        with:
+          environment: sandbox
+          dockerfile: "Dockerfile"
+          role-to-assume: "arn:aws:iam::783421985614:role/immutable-nonprod-docker-image-push"
+          role-session-name: "go-ethereum-immutable-nonprod-docker-image-push"
+          aws-region: "us-east-2"
+          sandbox-semver: true
+          push-git-tag: false
+          git-release-tag: ${{ needs.setup.outputs.tag_name }}
+          ghcr-semver-only-tag: false # prod release to deploy non-prefixed image
+      secrets:
+        github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
 
   sandbox_images:
     name: "Testnet: Rollout"
