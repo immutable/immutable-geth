@@ -13,7 +13,7 @@ permissions: # see this: https://docs.github.com/en/actions/using-jobs/assigning
 jobs:
   dev_docker_build_push:
     if: ${{ github.ref == 'refs/heads/main' }}
-    uses: immutable/im-shared-github-actions/.github/workflows/docker-build-tag-push.yml@v1.3.1
+    uses: ./.github/actions/push
     with:
       environment: dev
       dockerfile: "Dockerfile"

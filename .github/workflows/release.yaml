@@ -1,0 +1,131 @@
+name: Release
+run-name: Publish release ${{ github.event.release.tag_name }}
+
+# Cluster permissions
+permissions:
+  # this is used by github OIDC to assume the admin role later on
+  id-token: write # This is required for requesting the JWT
+  contents: write # This is required for actions/checkout
+
+on:
+  release:
+    types: [released]
+    branches: [main]
+
+jobs:
+  dev_validate:
+    name: "Devnet: E2E"
+    runs-on: general-runner
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - uses: ./.github/actions/e2e
+        with:
+          rpc: https://rpc.dev.immutable.com
+          priv_key: ${{ secrets.ZKEVM_FUNDED_PRIV_KEY }}
+
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.get-tag-for-release.outputs.TAG_NAME }}
+      repo_name: ${{ steps.get-repository-name.outputs.REPOSITORY_NAME }}
+    steps:
+      - name: Extract tag name for the release
+        id: get-tag-for-release
+        run: echo "TAG_NAME=$(echo ${GITHUB_REF} | sed 's/refs\/tags\///')" >> $GITHUB_OUTPUT
+
+      - name: Extract repository name
+        id: get-repository-name
+        run: echo "REPOSITORY_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_OUTPUT
+
+      - name: Print tag being deployed
+        run: echo "The tag name being deployed is ${{ steps.get-tag-for-release.outputs.TAG_NAME }}. This tag will be checked out before building and tagging docker image."
+
+  sandbox_docker_build_push:
+    name: "Testnet: Release"
+    needs: [setup, dev_validate]
+    uses: ./.github/actions/push
+    with:
+      environment: sandbox
+      dockerfile: "Dockerfile"
+      role-to-assume: "arn:aws:iam::783421985614:role/immutable-nonprod-docker-image-push"
+      role-session-name: "go-ethereum-immutable-nonprod-docker-image-push"
+      aws-region: "us-east-2"
+      sandbox-semver: true
+      push-git-tag: false
+      git-release-tag: ${{ needs.setup.outputs.tag_name }}
+      ghcr-semver-only-tag: false # prod release to deploy non-prefixed image
+    secrets:
+      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+
+  sandbox_images:
+    name: "Testnet: Rollout"
+    runs-on: general-runner
+    environment: sandbox
+    timeout-minutes: 10 # Job will loop until images are up to date
+    needs: [setup, sandbox_docker_build_push]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: configure aws credentials (nonprod)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::783421985614:role/immutable-nonprod-cluster-operations
+          aws-region: us-east-2
+      - uses: azure/setup-kubectl@v3.2
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name sandbox \
+            --region us-east-2 \
+      - name: Wait for Rollout
+        shell: bash
+        run: ./.github/scripts/wait_images.sh sandbox sandbox-${{ needs.setup.outputs.tag_name }}
+
+  sandbox_validate:
+    name: "Testnet: E2E"
+    runs-on: ubuntu-20-04-4-cores
+    needs: [setup, sandbox_docker_build_push, sandbox_images]
+    environment: sandbox
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache modules
+        uses: ./.github/actions/cache/golang
+      - uses: ./.github/actions/e2e
+        with:
+          rpc: https://rpc.testnet.immutable.com
+          priv_key: ${{ secrets.ZKEVM_FUNDED_PRIV_KEY }}
+
+  prod_docker_build_push:
+    name: "Mainnet: Release"
+    runs-on: ubuntu-latest
+    environment: prod
+    needs: [setup, sandbox_docker_build_push, sandbox_images, sandbox_validate]
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+      - name: Promote sandbox image to prod
+        id: promote-sandbox-to-prod
+        shell: bash
+        run: |
+          sandbox_image="ghcr.io/${{ github.repository }}/${{ needs.setup.outputs.repo_name }}:sandbox-${{ needs.setup.outputs.tag_name }}"
+          prod_image="ghcr.io/${{ github.repository }}/${{ needs.setup.outputs.repo_name }}:prod-${{ needs.setup.outputs.tag_name }}"
+          no_prefix_image="ghcr.io/${{ github.repository }}/${{ needs.setup.outputs.repo_name }}:${{ needs.setup.outputs.tag_name }}"
+          latest_image="ghcr.io/${{ github.repository }}/${{ needs.setup.outputs.repo_name }}:latest"
+
+          docker pull "$sandbox_image"
+          docker tag "$sandbox_image" "$prod_image"
+          docker tag "$sandbox_image" "$no_prefix_image"
+          docker tag "$sandbox_image" "$latest_image"
+          docker push "$prod_image"
+          docker push "$no_prefix_image"
+          docker push "$latest_image"
