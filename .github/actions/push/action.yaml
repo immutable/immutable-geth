@@ -39,9 +39,9 @@ runs:
         if [ -z ${{ inputs.image_tag }} ]; then
             BUILD_TIMESTAMP="$(date +%s)"
             SHORT_SHA="$(git rev-parse --short HEAD)"
-            echo GHCR_TAG="ghcr.io/${{ github.repository }}/$REPOSITORY_NAME:develop-$BUILD_TIMESTAMP-git.$SHORT_SHA" >> $GITHUB_ENV
+            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth/immutable-geth:develop-$BUILD_TIMESTAMP-git.$SHORT_SHA" >> $GITHUB_ENV
         else
-            echo GHCR_TAG="ghcr.io/${{ github.repository }}/$REPOSITORY_NAME:${{ inputs.image_tag }}" >> $GITHUB_ENV
+            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth/immutable-geth:${{ inputs.image_tag }}" >> $GITHUB_ENV
         fi
 
     - name: Restore Go mod (pkg)
@@ -87,6 +87,6 @@ runs:
         build-args: ${{ inputs.build-args }}
         tags: ${{ env.GHCR_TAG }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:cache
-        cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:cache,mode=max
+        cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth/immutable-geth:cache
+        cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth/immutable-geth:cache,mode=max
         provenance: false
