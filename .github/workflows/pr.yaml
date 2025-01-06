@@ -10,6 +10,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dev_docker_build_push:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    uses: ./.github/actions/push
+    with:
+      environment: dev
+      dockerfile: "Dockerfile"
+      role-to-assume: "arn:aws:iam::783421985614:role/immutable-nonprod-docker-image-push"
+      role-session-name: "go-ethereum-immutable-nonprod-docker-image-push"
+      aws-region: "us-east-2"
+      go-mod-cache-path: "~/go/pkg/mod"
+      go-build-cache-path: "~/.cache/go-build"
+    secrets:
+      github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+
   bootstrap:
     name: Local E2E Tests
     runs-on: ubuntu-20-04-4-cores
@@ -74,3 +88,4 @@ jobs:
         run: |
           go run build/ci.go install
           go test $(go list ./... | grep -v 'go-ethereum/tests/immutable') -p 1 --parallel 4 -timeout=30m
+
