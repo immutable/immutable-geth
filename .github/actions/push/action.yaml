@@ -2,8 +2,10 @@
 name: Docker build and push
 
 inputs:
-  environment:
+  github-token:
     required: true
+  image_tag:
+    required: false
     type: string
   dockerfile:
     required: false
@@ -12,93 +14,39 @@ inputs:
   build-args:
     required: false
     type: string
-  semver-level:
-    required: false
-    type: string
-    default: patch
-  git-release-tag:
-    required: false
-    type: string
-  push-git-tag:
-    required: false
-    type: boolean
-    default: true
-  ghcr-semver-only-tag:
-    required: false
-    type: boolean
-    default: false
-  go-mod-cache-path:
-    required: false
-    type: string
-    default: ""
-  go-build-cache-path:
-    required: false
-    type: string
-    default: ""
-
-# this is used by github OIDC to assume the admin role later on
-permissions: # see this: https://docs.github.com/en/actions/using-jobs/assigning-permissions-to-jobs
-  id-token: write # This is required for requesting the JWT
-  contents: write # This is required for actions/checkout
 
 runs:
   using: "composite"
   steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-        submodules: false
-        token: ${{ secrets.GITHUB_TOKEN }}
-        ref: ${{ inputs.git-release-tag }}
-
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v2
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ inputs.github-token }}
 
     - name: Extract Docker metadata
       id: meta
       uses: docker/metadata-action@v4
       with:
         images: ghcr.io/${{ github.repository }}/s
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ inputs.github-token }}
 
-    - name: Set env vars
+    - name: Image tag
       run: |
-        echo BUILD_TIMESTAMP="$(date +%s)" >> $GITHUB_ENV
-        echo REPOSITORY_NAME="$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
-        echo TAG_NAME="$(echo ${{ github.ref }} | cut -d / -f3-)" >> $GITHUB_ENV
-        echo SHORT_SHA="$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-    - name: Get latest tag
-      run: echo tag="$(git tag --sort=v:refname | tail -n 1)" >> $GITHUB_OUTPUT
-      id: get-latest-tag
-
-    - name: Bump semver patch
-      uses: ./actions/bump-semver
-      id: bump-semver
-      with:
-        current_version: ${{ steps.get-latest-tag.outputs.tag }}
-        level: ${{ inputs.semver-level }}
-
-    - name: Build tags
-      id: build-tags
-      run: |
-        # Dev standard tagging
-        echo GHCR_TAG="ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:develop-${{ env.BUILD_TIMESTAMP }}-git.${{ env.SHORT_SHA }}" >> $GITHUB_ENV
-
-    - name: Echo GITHUB_ENV variable
-      run: echo $GITHUB_ENV
+        REPOSITORY_NAME="$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')"
+        if [ -z ${{ inputs.image_tag }} ]; then
+            BUILD_TIMESTAMP="$(date +%s)"
+            SHORT_SHA="$(git rev-parse --short HEAD)"
+            echo GHCR_TAG="ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:develop-${{ env.BUILD_TIMESTAMP }}-git.${{ env.SHORT_SHA }}" >> $GITHUB_ENV
+        else
+            echo GHCR_TAG="ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:${{ inputs.image_tag }}" >> $GITHUB_ENV
+        fi
 
     - name: Restore Go mod (pkg)
-      if: ${{ inputs.go-mod-cache-path != '' }}
       uses: actions/cache/restore@v3
       with:
-        path: |
-          ${{ inputs.go-mod-cache-path }}
+        path: "~/go/pkg/mod"
         key: ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-${{ github.run_id }}
         restore-keys: |
           ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-
@@ -106,11 +54,9 @@ runs:
           ${{ runner.os }}-gomod-
 
     - name: Restore Go build (test)
-      if: ${{ inputs.go-build-cache-path != '' }}
       uses: actions/cache/restore@v3
       with:
-        path: |
-          ${{ inputs.go-build-cache-path }}
+        path: "~/.cache/go-build"
         key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-${{ github.run_id }}
         restore-keys: |
           ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-
@@ -142,13 +88,3 @@ runs:
         cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:cache
         cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/${{ env.REPOSITORY_NAME }}:cache,mode=max
         provenance: false
-
-    - if: ${{ inputs.environment == 'prod' && inputs.push-git-tag }}
-      name: Push semver patch
-      run: |
-        tag=${{ steps.bump-semver.outputs.new_version }}
-        message='${{ steps.bump-semver.outputs.new_version }}'
-        git config user.name "${GITHUB_ACTOR}"
-        git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-        git tag -a "${tag}" -m "${message}"
-        git push origin "${tag}"

@@ -14,13 +14,11 @@ jobs:
     name: temporary
     runs-on: ubuntu-20-04-4-cores
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
       - uses: ./.github/actions/push
         with:
-          environment: dev
-          dockerfile: "Dockerfile"
-          go-mod-cache-path: "~/go/pkg/mod"
-          go-build-cache-path: "~/.cache/go-build"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   bootstrap:
     name: Local E2E Tests
