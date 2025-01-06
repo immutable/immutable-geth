@@ -37,6 +37,9 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      github-token:
+        required: true
 
 # this is used by github OIDC to assume the admin role later on
 permissions: # see this: https://docs.github.com/en/actions/using-jobs/assigning-permissions-to-jobs
@@ -56,7 +59,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-          token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+          token: ${{ secrets.github-token }}
           ref: ${{ inputs.git-release-tag }}
 
       - name: Log in to GitHub Container Registry
@@ -64,14 +67,14 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+          password: ${{ secrets.github-token }}
 
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v4
         with:
           images: ghcr.io/${{ github.repository }}/s
-          github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
+          github-token: ${{ secrets.github-token }}
 
       - name: Set env vars
         run: |

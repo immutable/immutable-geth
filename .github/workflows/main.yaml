@@ -23,6 +23,8 @@ jobs:
           dockerfile: "Dockerfile"
           go-mod-cache-path: "~/go/pkg/mod"
           go-build-cache-path: "~/.cache/go-build"
+        secrets:
+          github-token: ${{ secrets.PLATFORM_SA_GITHUB_TOKEN }}
 
   tests:
     name: Tests
