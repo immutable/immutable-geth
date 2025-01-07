@@ -1,4 +1,4 @@
-name: Build docker image, tag and push
+name: Main
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   push:
     name: Push Docker
-    runs-on: ubuntu-20-04-4-cores
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3

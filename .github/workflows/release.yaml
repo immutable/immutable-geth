@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  setup:
+    name: Setup Envs
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.get-tag-for-release.outputs.TAG_NAME }}
+    steps:
+      - name: Extract tag name for the release
+        id: get-tag-for-release
+        run: echo "TAG_NAME=$(echo ${GITHUB_REF} | sed 's/refs\/tags\///')" >> $GITHUB_OUTPUT
+      - name: Print tag being deployed
+        run: echo "The tag name being deployed is ${{ steps.get-tag-for-release.outputs.TAG_NAME }}."
+
+  push:
+    name: Push Docker
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: ./.github/actions/push
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image_tag: ${{ needs.setup.outputs.tag_name }}
