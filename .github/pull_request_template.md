@@ -1,6 +1,6 @@
 # Summary
 
-<!---  
+<!---
 Provide a short summary of the changes and the reasoning behind them.
 
 Include references to related issues (e.g. #1234 which will make a direct link to the issue).
@@ -16,3 +16,4 @@ Include @mentions to any relevant contributors and maintainers.
 - [ ] Bugs fixed
 - [ ] Unit tests added or updated
 - [ ] E2E tests added or updated
+- [ ] CI updated
