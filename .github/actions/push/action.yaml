@@ -4,7 +4,7 @@ name: Docker build and push
 inputs:
   github-token:
     required: true
-  image_tag:
+  image-tag:
     required: false
     type: string
   dockerfile:

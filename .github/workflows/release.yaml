@@ -9,7 +9,7 @@ jobs:
     name: Setup Envs
     runs-on: ubuntu-latest
     outputs:
-      tag_name: ${{ steps.get-tag-for-release.outputs.TAG_NAME }}
+      tag-name: ${{ steps.get-tag-for-release.outputs.TAG_NAME }}
     steps:
       - name: Extract tag name for the release
         id: get-tag-for-release
@@ -27,4 +27,4 @@ jobs:
       - uses: ./.github/actions/push
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image_tag: ${{ needs.setup.outputs.tag_name }}
+          image-tag: ${{ needs.setup.outputs.tag-name }}
