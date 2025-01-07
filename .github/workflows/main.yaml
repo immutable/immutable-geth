@@ -1,7 +1,10 @@
 name: Build docker image, tag and push
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   push:
