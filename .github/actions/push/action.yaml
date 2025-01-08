@@ -1,10 +1,10 @@
 ---
-name: Docker build and push
+name: Docker Build + Push
 
 inputs:
   github-token:
     required: true
-  image_tag:
+  image-tag:
     required: false
     type: string
   dockerfile:
@@ -41,7 +41,7 @@ runs:
             SHORT_SHA="$(git rev-parse --short HEAD)"
             echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth:develop-$BUILD_TIMESTAMP-git.$SHORT_SHA" >> $GITHUB_ENV
         else
-            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth:${{ inputs.image_tag }}" >> $GITHUB_ENV
+            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth:${{ inputs.image-tag }}" >> $GITHUB_ENV
         fi
 
     - name: Restore Go mod (pkg)
