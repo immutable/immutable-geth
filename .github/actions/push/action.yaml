@@ -4,9 +4,10 @@ name: Docker Build + Push
 inputs:
   github-token:
     required: true
-  image-tag:
+  tags:
     required: false
     type: string
+    description: "Comma separated list of Docker tags (e.g. ghcr.io/immutable/immutable-geth/immutable-geth:latest)"
   dockerfile:
     required: false
     type: string
@@ -31,18 +32,6 @@ runs:
       with:
         images: ghcr.io/${{ github.repository }}/s
         github-token: ${{ inputs.github-token }}
-
-    - name: Image tag
-      shell: bash
-      run: |
-        REPOSITORY_NAME="$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')"
-        if [ -z ${{ inputs.image_tag }} ]; then
-            BUILD_TIMESTAMP="$(date +%s)"
-            SHORT_SHA="$(git rev-parse --short HEAD)"
-            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth:develop-$BUILD_TIMESTAMP-git.$SHORT_SHA" >> $GITHUB_ENV
-        else
-            echo GHCR_TAG="ghcr.io/${{ github.repository }}/immutable-geth:${{ inputs.image-tag }}" >> $GITHUB_ENV
-        fi
 
     - name: Restore Go mod (pkg)
       uses: actions/cache/restore@v3
@@ -85,7 +74,7 @@ runs:
         file: ${{ inputs.dockerfile }}
         push: true
         build-args: ${{ inputs.build-args }}
-        tags: ${{ env.GHCR_TAG }}
+        tags: ${{ input.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache
         cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache,mode=max
