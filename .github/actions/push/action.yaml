@@ -74,7 +74,7 @@ runs:
         file: ${{ inputs.dockerfile }}
         push: true
         build-args: ${{ inputs.build-args }}
-        tags: ${{ input.tags }}
+        tags: ${{ inputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache
         cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache,mode=max
