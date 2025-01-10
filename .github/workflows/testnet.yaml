@@ -6,6 +6,9 @@ on:
       dev:
         description: "Develop tag to push as testnet (e.g. develop-1736464855-git.6a0aa89)"
         required: true
+      version:
+        description: "Testnet version to use in the new image tag (e.g. v1.0.0-beta.13)"
+        required: true
 
 jobs:
   tag_and_push_testnet_image:
@@ -23,8 +26,7 @@ jobs:
         run: |
           dev_tag="${{ inputs.dev }}"
           dev_image="ghcr.io/${{ github.repository }}/immutable-geth:$dev_tag"
-          testnet_tag="$(echo "$dev_tag" | sed "s/develop/testnet/g")"
-          testnet_image="ghcr.io/${{ github.repository }}/immutable-geth:$testnet_tag"
+          testnet_image="ghcr.io/${{ github.repository }}/immutable-geth:testnet-${{ inputs.version }}"
 
           docker pull "$dev_image"
           docker tag "$dev_image" $testnet_image"
