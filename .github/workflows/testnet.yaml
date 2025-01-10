@@ -1,0 +1,31 @@
+name: Push Testnet Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      dev:
+        description: "Develop tag to push as testnet (e.g. develop-1736464855-git.6a0aa89)"
+        required: true
+
+jobs:
+  tag_and_push_testnet_image:
+    name: Tag and Push Testnet Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote Develop image to Testnet
+        shell: bash
+        run: |
+          dev_tag="${{ inputs.dev }}"
+          dev_image="ghcr.io/${{ github.repository }}/immutable-geth:$dev_tag"
+          testnet_tag="$(echo "$dev_tag" | sed "s/develop/testnet/g")"
+          testnet_image="ghcr.io/${{ github.repository }}/immutable-geth:$testnet_tag"
+
+          docker pull "$dev_image"
+          docker tag "$dev_image" $testnet_image"
+          docker push "$testnet_image"
