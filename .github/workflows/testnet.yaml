@@ -29,5 +29,5 @@ jobs:
           testnet_image="ghcr.io/${{ github.repository }}/immutable-geth:testnet-${{ inputs.version }}"
 
           docker pull "$dev_image"
-          docker tag "$dev_image" $testnet_image"
+          docker tag "$dev_image" "$testnet_image"
           docker push "$testnet_image"
