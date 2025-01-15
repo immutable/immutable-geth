@@ -34,6 +34,33 @@ var (
 	underPriceLimit = big.NewInt(0).SetUint64(settings.PriceLimit - 1)
 )
 
+func TestImmutableFeeHistory_RewardAbovePriceLimit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	client, err := evm.NewClient(ctx, config.rpcURL, 1, 1)
+	require.NoError(t, err)
+
+	// Check that rewards is above price limit
+	block, err := client.BlockNumber(ctx)
+	require.NoError(t, err)
+
+	percentiles := [][]float64{
+		nil,
+		{0.25, 0.75},
+	}
+	for _, p := range percentiles {
+		feeHistory, err := client.EthClient().FeeHistory(ctx, 1, new(big.Int).SetUint64(block), p)
+		require.NoError(t, err)
+		for i := range feeHistory.Reward {
+			for j := range feeHistory.Reward[i] {
+				// Check that reward is above or equal to pricelimit
+				cmp := feeHistory.Reward[i][j].Cmp(priceLimit)
+				require.True(t, cmp == 0 || cmp == 1)
+			}
+		}
+	}
+}
+
 func TestImmutablePriceLimit_SuggestTipCap_IsAbovePriceLimit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

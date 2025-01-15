@@ -324,10 +324,12 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks uint64, unresolvedL
 	if len(rewardPercentiles) != 0 {
 		reward = reward[:firstMissing]
 		// CHANGE(immutable): Floor of priority fee is pricelimit
-		for i := range reward {
-			for j := range reward[i] {
-				if reward[i][j].Cmp(priceLimit) < 0 {
-					reward[i][j] = priceLimit
+		if oracle.backend.ChainConfig().IsImmutableZKEVM() {
+			for i := range reward {
+				for j := range reward[i] {
+					if reward[i][j].Cmp(priceLimit) < 0 {
+						reward[i][j] = priceLimit
+					}
 				}
 			}
 		}

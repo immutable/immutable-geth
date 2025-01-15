@@ -81,6 +81,15 @@ function wait_shanghai() {
 # Run geth
 start_geth
 
+# Run these before any transactions are submitted
+echo "> Running Fee History tests"
+go test -count=1 -v ./tests/immutable \
+-privkey="$dir/cmd/geth/testdata/key.prv" \
+-rpc=http://localhost:8546 \
+-validatoradmin=http://localhost:8545 \
+-skipvoting=true \
+-run='.*FeeHistory.*'
+
 # Need to use 0x44 opcode for Prevrandao fork.
 echo "> Running post-prevrandao, pre-shanghai tests"
 go test -count=1 -v ./tests/immutable \
