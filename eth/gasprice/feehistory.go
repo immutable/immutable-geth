@@ -25,6 +25,7 @@ import (
 	"math/big"
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/cmd/geth/immutable/settings"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -36,6 +37,8 @@ import (
 var (
 	errInvalidPercentile = errors.New("invalid reward percentile")
 	errRequestBeyondHead = errors.New("request beyond head block")
+	// CHANGE(immutable): Floor of priority fee is pricelimit
+	priceLimit = big.NewInt(int64(settings.PriceLimit))
 )
 
 const (
@@ -320,6 +323,16 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks uint64, unresolvedL
 	}
 	if len(rewardPercentiles) != 0 {
 		reward = reward[:firstMissing]
+		// CHANGE(immutable): Floor of priority fee is pricelimit
+		if oracle.backend.ChainConfig().IsImmutableZKEVM() {
+			for i := range reward {
+				for j := range reward[i] {
+					if reward[i][j].Cmp(priceLimit) < 0 {
+						reward[i][j] = priceLimit
+					}
+				}
+			}
+		}
 	} else {
 		reward = nil
 	}

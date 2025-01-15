@@ -8,88 +8,89 @@ and this project adheres to
 
 ## [v1.0.0-beta.14]
 
-* Limit the number of bytes read by NR RPC middleware
-* Add fix [#30014](https://github.com/ethereum/go-ethereum/pull/30014) and [#30430](https://github.com/ethereum/go-ethereum/pull/30430) from upstream
+- Limit the number of bytes read by NR RPC middleware
+- Add fix [#30014](https://github.com/ethereum/go-ethereum/pull/30014) and [#30430](https://github.com/ethereum/go-ethereum/pull/30430) from upstream
+- Enforce pricelimit (100 gwei) on rewards values returned by `eth_feeHistory`
 
 ## [v1.0.0-beta.13]
 
-* Remove deployer allowlist
-* Add `GETH_FLAG_IMMUTABLE_LONG_RANGE_SYNC` flag to allow snap sync from genesis
+- Remove deployer allowlist
+- Add `GETH_FLAG_IMMUTABLE_LONG_RANGE_SYNC` flag to allow snap sync from genesis
 
 ## [v1.0.0-beta.12]
 
 #### Cancun
+
 This release enables Cancun fork on all Immutable zkEVM networks.
-| Network  | Unix Timestamp | Date |
+| Network | Unix Timestamp | Date |
 | -------- | ------- | ------- |
-| Devnet   | 1724796000 | Tue Aug 27 22:00:00 UTC 2024 |
-| Testnet  | 1727128800 | Mon Sep 23 22:00:00 UTC 2024 |
-| Mainnet  | 1728338400 | Mon Oct  7 22:00:00 UTC 2024 |
+| Devnet | 1724796000 | Tue Aug 27 22:00:00 UTC 2024 |
+| Testnet | 1727128800 | Mon Sep 23 22:00:00 UTC 2024 |
+| Mainnet | 1728338400 | Mon Oct 7 22:00:00 UTC 2024 |
 
-* Enable `ExcessBlobGas`, `BlobGasUsed`, `ParentBeaconRoot`
-    * All values are `0x0`
-* Enable `WithdrawalsHash`, and `Withdrawals` headers
-    * `Withdrawals` are empty and `WithdrawalsHash` is the corresponding digest
-* Enable `TSTORE`, `TLOAD`, and `MCOPY` op codes
-* Enable `BLOBHASH` op code
-* Enable Point Evaluation precompile
-* Update `SELFDESTRUCT` op code
-* Update clique stack to support Cancun
-* Disable blob transactions
-* Re-order logic that sets blob block headers and beacon root header to after `engine.Prepare` in order to interoperate with clique which produces variable blocktimes (rather than fixed slots)
-
+- Enable `ExcessBlobGas`, `BlobGasUsed`, `ParentBeaconRoot`
+  - All values are `0x0`
+- Enable `WithdrawalsHash`, and `Withdrawals` headers
+  - `Withdrawals` are empty and `WithdrawalsHash` is the corresponding digest
+- Enable `TSTORE`, `TLOAD`, and `MCOPY` op codes
+- Enable `BLOBHASH` op code
+- Enable Point Evaluation precompile
+- Update `SELFDESTRUCT` op code
+- Update clique stack to support Cancun
+- Disable blob transactions
+- Re-order logic that sets blob block headers and beacon root header to after `engine.Prepare` in order to interoperate with clique which produces variable blocktimes (rather than fixed slots)
 
 #### Other
 
-* Add `--gossipdefault` flag to toggle default geth tx gossiping
-* Add GETH_FLAG_P2P_SUBNET env var to limit inbound messages based on subnet
-* Add specific peer message handling in `eth/handler.go` to disable ingestion of state
-* Add `--rpcproxy` flag to toggle RPC proxy forwarding
-* Add RPC proxy forwarding to Immutable zkEVM
-* Add `--disabletxpoolgossip` flag to disable tx gossiping
-* Add `--gossipdefault` flag to toggle default geth tx gossiping
-* Add GETH_FLAG_P2P_SUBNET env var to limit inbound messages based on subnet
+- Add `--gossipdefault` flag to toggle default geth tx gossiping
+- Add GETH_FLAG_P2P_SUBNET env var to limit inbound messages based on subnet
+- Add specific peer message handling in `eth/handler.go` to disable ingestion of state
+- Add `--rpcproxy` flag to toggle RPC proxy forwarding
+- Add RPC proxy forwarding to Immutable zkEVM
+- Add `--disabletxpoolgossip` flag to disable tx gossiping
+- Add `--gossipdefault` flag to toggle default geth tx gossiping
+- Add GETH_FLAG_P2P_SUBNET env var to limit inbound messages based on subnet
 
 ## [v1.0.0-beta.11]
 
-* Added partner public role to init container logic
+- Added partner public role to init container logic
 
 ## [v1.0.0-beta.10]
 
-* Add log to correlate block period with block number and hash
+- Add log to correlate block period with block number and hash
 
 ## [v1.0.0-beta.9]
 
-* Reject forkids that do not contain prevrandao fork
-* Disable more RPC namespaces
-* Correct the embedded mainnet.toml's price limit value to 10 gwei
+- Reject forkids that do not contain prevrandao fork
+- Disable more RPC namespaces
+- Correct the embedded mainnet.toml's price limit value to 10 gwei
 
 ## [v1.0.0-beta.8]
 
-* Add prevrandao fork to forkid
-* Pull v1.13.15 from upstream: [ethereum/go-ethereum](https://github.com/ethereum/go-ethereum)
-* Log peer fullnames rather than abbreviated
-* Do not rate limit peer connections that match on the supplied networks from the net restrict configuration
-* Reduce p2p discv4 default refresh interval
+- Add prevrandao fork to forkid
+- Pull v1.13.15 from upstream: [ethereum/go-ethereum](https://github.com/ethereum/go-ethereum)
+- Log peer fullnames rather than abbreviated
+- Do not rate limit peer connections that match on the supplied networks from the net restrict configuration
+- Reduce p2p discv4 default refresh interval
 
 ## [v1.0.0-beta.7]
 
-* Create Prevrandao fork
-* Fix issues syncing with testnet and mainnet relating to Prevrandao fork
+- Create Prevrandao fork
+- Fix issues syncing with testnet and mainnet relating to Prevrandao fork
 
 ## [v1.0.0-beta.6]
 
-* Update geth version logic to be based on immutable/go-ethereum releases
-* Add `downloader/sync` metric
+- Update geth version logic to be based on immutable/go-ethereum releases
+- Add `downloader/sync` metric
 
 ## [v1.0.0-beta.5]
 
-* Pull v1.13.14 from upstream: [ethereum/go-ethereum](https://github.com/ethereum/go-ethereum)
-* Make `DefaultBaseFeeChangeDenominator` consistent with upstream (8) and mutate it based on chain configuration
-  * If chain configuration matches Immutable zkEVM network ID and clique settings, set `DefaultBaseFeeChangeDenominator` to 50
-* Validate chain configuration based on expected values if Immutable zkEVM network ID is specified
-* Use minimum price limit instead of last price to represent the priority fee of each fetched empty block inside suggested tip cap endpoint.
-* Add block period, block propagation, and suggested tip cap metrics
+- Pull v1.13.14 from upstream: [ethereum/go-ethereum](https://github.com/ethereum/go-ethereum)
+- Make `DefaultBaseFeeChangeDenominator` consistent with upstream (8) and mutate it based on chain configuration
+  - If chain configuration matches Immutable zkEVM network ID and clique settings, set `DefaultBaseFeeChangeDenominator` to 50
+- Validate chain configuration based on expected values if Immutable zkEVM network ID is specified
+- Use minimum price limit instead of last price to represent the priority fee of each fetched empty block inside suggested tip cap endpoint.
+- Add block period, block propagation, and suggested tip cap metrics
 
 ## [v1.0.0-beta.4]
 
@@ -106,13 +107,14 @@ This release enables Cancun fork on all Immutable zkEVM networks.
 ## [v1.0.0-beta.1]
 
 This release enables Shanghai fork on all Immutable zkEVM networks.
-| Network  | Unix Timestamp | Date |
+| Network | Unix Timestamp | Date |
 | -------- | ------- | ------- |
-| Devnet   | 1709067600 | Tue Feb 27 21:00:00 UTC 2024 |
-| Testnet  | 1710280800 | Tue Mar 12 22:00:00 UTC 2024 |
-| Mainnet  | 1711490400 | Tue Mar 26 22:00:00 UTC 2024 |
+| Devnet | 1709067600 | Tue Feb 27 21:00:00 UTC 2024 |
+| Testnet | 1710280800 | Tue Mar 12 22:00:00 UTC 2024 |
+| Mainnet | 1711490400 | Tue Mar 26 22:00:00 UTC 2024 |
 
 The following changes were made to support the forks:
+
 - Update clique to
   - allow for Shanghai to be enabled; and
   - log more detail around existence of withdrawals and withdrawals hashes
@@ -143,10 +145,10 @@ The following changes were made to support the forks:
 ## [v0.0.13]
 
 - Implement Immutable wallet backend
-    - Add AWS Secrets Manager backend store implementation for private key access via AWS
-    - Add local keystore backend store implementation for testing purposes
-    - Add `GETH_FLAG_IMMUTABLE_AWS_REGION` and `POD_NAMESPACE` env var support for configuring aws wallet backend
-    - Add `GETH_FLAG_PASSWORD_FILEPATH` env var to existing password filepath flag
+  - Add AWS Secrets Manager backend store implementation for private key access via AWS
+  - Add local keystore backend store implementation for testing purposes
+  - Add `GETH_FLAG_IMMUTABLE_AWS_REGION` and `POD_NAMESPACE` env var support for configuring aws wallet backend
+  - Add `GETH_FLAG_PASSWORD_FILEPATH` env var to existing password filepath flag
 - Added flag to disable Clique endpoints on RPC server
 - Added Clique Client
 - Added CLI for Clique Voting
