@@ -8,6 +8,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  invariants:
+    name: Invariants
+    runs-on: ubuntu-20-04-4-cores
+    timeout-minutes: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Invariants
+        shell: bash
+        run: ./.github/scripts/invariants.sh
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@v3.82.7
+
   bootstrap:
     name: Local E2E Tests
     runs-on: ubuntu-20-04-4-cores
