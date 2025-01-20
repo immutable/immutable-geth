@@ -10,7 +10,7 @@ and this project adheres to
 
 - Limit the number of bytes read by NR RPC middleware
 - Add fix [#30014](https://github.com/ethereum/go-ethereum/pull/30014) and [#30430](https://github.com/ethereum/go-ethereum/pull/30430) from upstream
-- Enforce pricelimit (100 gwei) on rewards values returned by `eth_feeHistory`
+- Enforce pricelimit (10 gwei) on rewards values returned by `eth_feeHistory`
 
 ## [v1.0.0-beta.13]
 
@@ -240,7 +240,3 @@ The following changes were made to support the forks:
 - Added CLI parameter options for the geth immutable bootstraper, which can
   potentially takes in a list of filepaths for blocklists and allowlists (#83)
 - Added flags to disable Admin/Txpool/Engine/Debug endpoints on RPC server
-
-### Fixed
-
-[unreleased]: https://github.com/immutable/go-ethereum/compare/v1.11.6-beta.1...HEAD
