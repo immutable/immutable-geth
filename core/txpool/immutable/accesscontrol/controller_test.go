@@ -82,6 +82,19 @@ func TestImmutableAccessControl_Controller_IsAllowed(t *testing.T) {
 			expectedAllowed: true,
 		},
 		{
+			name:          "AddressIsEmpty",
+			isAnAllowList: false,
+			providers: map[string]AddressProvider{
+				"list": &MockAddressProvider{
+					addresses: map[common.Address]struct{}{
+						common.HexToAddress("0x1234567890123456789012345678901234567890"): {},
+					},
+				},
+			},
+			addressToCheck:  common.Address{},
+			expectedAllowed: true,
+		},
+		{
 			name:          "AddressInAllowedAddresses",
 			isAnAllowList: true,
 			providers: map[string]AddressProvider{
