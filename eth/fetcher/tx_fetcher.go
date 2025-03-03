@@ -364,7 +364,7 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 					log.Error("tx pool overflow", "err", err, "tx", batch[j].Hash().String())
 					txPoolOverflowCounter.Inc(1)
 				} else {
-					log.Info("failed to add tx", "err", err, "tx", batch[j].Hash().String())
+					log.Trace("failed to add tx", "err", err, "tx", batch[j].Hash().String())
 				}
 			}
 			metas = append(metas, txMetadata{
