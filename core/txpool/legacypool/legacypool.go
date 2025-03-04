@@ -324,8 +324,7 @@ func (pool *LegacyPool) FilterWithError(tx *types.Transaction) error {
 	// Check for every access controllers that this transaction is allowed to go through
 	for _, accessControl := range pool.accessControllers {
 		if !accessControl.IsAllowed(from, tx) {
-			log.Warn("Transaction is not allowed by access control",
-				"from", from, "to", tx.To(), "tx", tx.Hash(), "isBlockList", accessControl.IsBlocklist())
+			log.Warn("Transaction is not allowed by access control", "from", from, "tx", tx.Hash(), "isBlockList", accessControl.IsBlocklist())
 			// If any access control doesn't allow
 			return txpool.ErrTxIsUnauthorized
 		}

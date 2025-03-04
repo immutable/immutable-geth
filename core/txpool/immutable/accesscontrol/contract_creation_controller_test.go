@@ -17,8 +17,6 @@
 package accesscontrol
 
 import (
-	"crypto/ecdsa"
-	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,39 +24,18 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// MockAddressProvider is a mock implementation of AddressProvider for testing.
-type MockAddressProvider struct {
-	addresses map[common.Address]struct{}
-}
-
-func (m *MockAddressProvider) Provide() map[common.Address]struct{} {
-	return m.addresses
-}
-
-func contractCreation(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewContractCreation(nonce, big.NewInt(0), gaslimit, big.NewInt(1), nil), types.NewEIP155Signer(big.NewInt(1337)), key)
-	return tx
-}
-
-func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Transaction {
-	return pricedTransaction(nonce, gaslimit, big.NewInt(1), key)
-}
-
-func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil), types.NewEIP155Signer(big.NewInt(1337)), key)
-	return tx
-}
-
-func TestImmutableAccessControl_Controller_IsAllowed(t *testing.T) {
+func TestImmutableAccessControl_ContractCreationController_IsAllowed(t *testing.T) {
+	key, _ := crypto.GenerateKey()
 	tests := []struct {
 		name            string
 		providers       map[string]AddressProvider
 		addressToCheck  common.Address
+		tx              *types.Transaction
 		isAnAllowList   bool
 		expectedAllowed bool
 	}{
 		{
-			name:          "AddressInBlockedAddresses",
+			name:          "Address is in block list and tx is of contract creation",
 			isAnAllowList: false,
 			providers: map[string]AddressProvider{
 				"list": &MockAddressProvider{
@@ -67,65 +44,45 @@ func TestImmutableAccessControl_Controller_IsAllowed(t *testing.T) {
 					},
 				},
 			},
+			tx:              contractCreation(1234, 123, key),
 			addressToCheck:  common.HexToAddress("0x1234567890123456789012345678901234567890"),
 			expectedAllowed: false,
 		},
 		{
-			name:          "AddressNotInBlockedAddresses",
+			name:          "Address is in block list and tx is not of contract creation",
+			isAnAllowList: false,
+			providers: map[string]AddressProvider{
+				"list": &MockAddressProvider{
+					addresses: map[common.Address]struct{}{
+						common.HexToAddress("0x1234567890123456789012345678901234567890"): {},
+					},
+				},
+			},
+			tx:              transaction(1234, 123, key),
+			addressToCheck:  common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			expectedAllowed: true,
+		},
+		{
+			name:          "Empty blocklist but tx is of contract creation",
 			isAnAllowList: false,
 			providers: map[string]AddressProvider{
 				"list": &MockAddressProvider{
 					addresses: map[common.Address]struct{}{},
 				},
 			},
-			addressToCheck:  common.HexToAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"),
-			expectedAllowed: true,
-		},
-		{
-			name:          "AddressInAllowedAddresses",
-			isAnAllowList: true,
-			providers: map[string]AddressProvider{
-				"list": &MockAddressProvider{
-					addresses: map[common.Address]struct{}{
-						common.HexToAddress("0x1234567890123456789012345678901234567890"): {},
-					},
-				},
-			},
-			addressToCheck:  common.HexToAddress("0x1234567890123456789012345678901234567890"),
-			expectedAllowed: true,
-		},
-		{
-			name:          "AddressNotInAllowedAddresses",
-			isAnAllowList: true,
-			providers: map[string]AddressProvider{
-				"list": &MockAddressProvider{
-					addresses: map[common.Address]struct{}{
-						common.HexToAddress("0x1234567890123456789012345678901234567890"): {},
-					},
-				},
-			},
-			addressToCheck:  common.HexToAddress("0x11111111111111111111111111"),
-			expectedAllowed: false,
-		},
-		{
-			name:          "EmptyAddresses",
-			isAnAllowList: false,
-			providers: map[string]AddressProvider{
-				"list": &MockAddressProvider{
-					addresses: map[common.Address]struct{}{},
-				},
-			},
+			tx:              contractCreation(1234, 123, key),
 			addressToCheck:  common.HexToAddress("0x11111111111111111111111111"),
 			expectedAllowed: true,
 		},
 		{
-			name:          "NilAddresses",
+			name:          "Nil blocklist sets but tx is of contract creation",
 			isAnAllowList: false,
 			providers: map[string]AddressProvider{
 				"list": &MockAddressProvider{
 					addresses: nil,
 				},
 			},
+			tx:              contractCreation(1234, 123, key),
 			addressToCheck:  common.HexToAddress("0x11111111111111111111111111"),
 			expectedAllowed: true,
 		},
@@ -133,14 +90,12 @@ func TestImmutableAccessControl_Controller_IsAllowed(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			controller := &Controller{
+			controller := &ContractCreation{
 				providers:     test.providers,
 				isAnAllowList: test.isAnAllowList,
 			}
 
-			key, _ := crypto.GenerateKey()
-			tx := transaction(012, 1234, key)
-			allowed := controller.IsAllowed(test.addressToCheck, tx)
+			allowed := controller.IsAllowed(test.addressToCheck, test.tx)
 
 			if allowed != test.expectedAllowed {
 				t.Errorf("Expected allowed=%t, got allowed=%t", test.expectedAllowed, allowed)
