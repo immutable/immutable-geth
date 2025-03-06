@@ -114,7 +114,7 @@ func New(conf *Config) (*Node, error) {
 	if os.Getenv("NEW_RELIC_APP_NAME") != "" {
 		nrApp, err = newrelic.NewApplication(
 			newrelic.ConfigFromEnvironment(),
-			newrelic.ConfigEnabled(true),
+			newrelic.ConfigEnabled(false),
 			nrlogrus.ConfigStandardLogger(),
 			newrelic.ConfigDistributedTracerEnabled(true),
 		)
