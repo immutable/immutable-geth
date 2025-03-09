@@ -114,9 +114,12 @@ func New(conf *Config) (*Node, error) {
 	if os.Getenv("NEW_RELIC_APP_NAME") != "" {
 		nrApp, err = newrelic.NewApplication(
 			newrelic.ConfigFromEnvironment(),
-			newrelic.ConfigEnabled(false),
+			newrelic.ConfigEnabled(true),
 			nrlogrus.ConfigStandardLogger(),
 			newrelic.ConfigDistributedTracerEnabled(true),
+			func(config *newrelic.Config) {
+				config.TransactionEvents.MaxSamplesStored = 1000
+			},
 		)
 		if err != nil {
 			log.Error("Failed to initialise New Relic agent: ", err)
