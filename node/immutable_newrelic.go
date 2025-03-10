@@ -70,8 +70,8 @@ func newRelicMiddleware(nrApp *newrelic.Application, next http.Handler) http.Han
 			return
 		}
 		requestBody := RequestBody{}
-		if err = json.Unmarshal(body, &requestBody); err != nil {
-			log.WithError(err).Error("Failed to parse request body")
+		if err := json.Unmarshal(body, &requestBody); err != nil {
+			log.Debug("Failed to parse request body", "body", body, "err", err.Error())
 		} else {
 			// Add the RPC method to the transaction attributes
 			txn.AddAttribute("rpcMethod", requestBody.Method)
