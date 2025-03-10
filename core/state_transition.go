@@ -459,10 +459,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		fee.Mul(fee, effectiveTipU256)
 		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
-	// CHANGE(immutable) add error logging
-	if vmerr != nil {
-		log.Warn("vm execution error", "err", vmerr)
-	}
 	return &ExecutionResult{
 		UsedGas:     st.gasUsed(),
 		RefundedGas: gasRefund,
