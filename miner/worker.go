@@ -519,11 +519,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				before := recommit
 				target := float64(recommit.Nanoseconds()) / adjust.ratio
 				recommit = recalcRecommit(minRecommit, recommit, target, true)
-				log.Warn("Increase miner recommit interval", "from", before, "to", recommit)
+				log.Debug("Increase miner recommit interval", "from", before, "to", recommit)
 			} else {
 				before := recommit
 				recommit = recalcRecommit(minRecommit, recommit, float64(minRecommit.Nanoseconds()), false)
-				log.Warn("Decrease miner recommit interval", "from", before, "to", recommit)
+				log.Debug("Decrease miner recommit interval", "from", before, "to", recommit)
 			}
 
 			if w.resubmitHook != nil {
@@ -812,7 +812,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	receipt, err := w.applyTransaction(env, tx)
 	if err != nil {
 		// CHANGE(immutable) add error logging
-		log.Warn("Transaction failed, discarding", "hash", tx.Hash(), "err", err)
+		log.Debug("Transaction failed, discarding", "hash", tx.Hash(), "err", err)
 		return nil, err
 	}
 	env.txs = append(env.txs, tx)
