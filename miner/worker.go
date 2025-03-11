@@ -519,11 +519,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				before := recommit
 				target := float64(recommit.Nanoseconds()) / adjust.ratio
 				recommit = recalcRecommit(minRecommit, recommit, target, true)
-				log.Warn("Increase miner recommit interval", "from", before, "to", recommit)
+				log.Debug("Increase miner recommit interval", "from", before, "to", recommit)
 			} else {
 				before := recommit
 				recommit = recalcRecommit(minRecommit, recommit, float64(minRecommit.Nanoseconds()), false)
-				log.Warn("Decrease miner recommit interval", "from", before, "to", recommit)
+				log.Debug("Decrease miner recommit interval", "from", before, "to", recommit)
 			}
 
 			if w.resubmitHook != nil {
