@@ -812,7 +812,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	receipt, err := w.applyTransaction(env, tx)
 	if err != nil {
 		// CHANGE(immutable) add error logging
-		log.Warn("Transaction failed, discarding", "hash", tx.Hash(), "err", err)
+		log.Debug("Transaction failed, discarding", "hash", tx.Hash(), "err", err)
 		return nil, err
 	}
 	env.txs = append(env.txs, tx)
