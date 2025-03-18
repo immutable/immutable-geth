@@ -18,7 +18,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache golangci-lint
-      uses: actions/cache@v3
+      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       id: cache-golangci-lint
       with:
         path: ~/go/bin/golangci-lint
@@ -31,7 +31,7 @@ runs:
 
     - name: Restore golangci-lint analysis cache
       if: ${{ inputs.refresh-analysis-cache != 'true' }}
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: ~/.cache/golangci-lint
         # This technique will make the cache key unique to the commit SHA,
@@ -42,7 +42,7 @@ runs:
 
     - name: Cache golangci-lint analysis cache
       if: ${{ inputs.refresh-analysis-cache == 'true' }}
-      uses: actions/cache@v3
+      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: ~/.cache/golangci-lint
         # This technique will make the cache key unique to the commit SHA,

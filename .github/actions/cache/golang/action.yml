@@ -15,7 +15,7 @@ runs:
   steps:
     - name: Restore Go mod (pkg)
       if: ${{ inputs.refresh-go-cache != 'true' }}
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: |          
           ~/go/pkg/mod
@@ -26,7 +26,7 @@ runs:
 
     - name: Restore Go build (test)
       if: ${{ inputs.refresh-go-cache != 'true' }}
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: |
           ~/.cache/go-build
@@ -37,7 +37,7 @@ runs:
 
     - name: Cache Go mod (pkg)
       if: ${{ inputs.refresh-go-cache == 'true' }}
-      uses: actions/cache@v3
+      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: |
           ~/go/pkg/mod
@@ -48,7 +48,7 @@ runs:
 
     - name: Cache Go build (test)
       if: ${{ inputs.refresh-go-cache == 'true' }}
-      uses: actions/cache@v3
+      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: |
           ~/.cache/go-build

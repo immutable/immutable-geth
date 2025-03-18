@@ -34,7 +34,7 @@ runs:
         github-token: ${{ inputs.github-token }}
 
     - name: Restore Go mod (pkg)
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: "~/go/pkg/mod"
         key: ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-${{ github.run_id }}
@@ -44,7 +44,7 @@ runs:
           ${{ runner.os }}-gomod-
 
     - name: Restore Go build (test)
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
       with:
         path: "~/.cache/go-build"
         key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}-${{ github.run_id }}
