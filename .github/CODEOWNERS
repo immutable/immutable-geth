@@ -1,6 +1,6 @@
 # Lines starting with '#' are comments.
 # Each line is a file pattern followed by one or more owners.
 
-.github/workflows/              @immutable/prodsec @sergerad @drinkcoffee @ermyas @jp-imx @ipekt @wcgcyx
-.github/actions/                @immutable/prodsec @sergerad @drinkcoffee @ermyas @jp-imx @ipekt @wcgcyx
-./                              @sergerad @drinkcoffee @ermyas @jp-imx @ipekt @wcgcyx
+.github/workflows/              @immutable/prodsec @immutable/rollups
+.github/actions/                @immutable/prodsec @immutable/rollups
+*                               @immutable/rollups
