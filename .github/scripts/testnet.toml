@@ -1,0 +1,87 @@
+[Eth]
+NetworkId = 13473
+SyncMode = "snap"
+EthDiscoveryURLs = []
+SnapDiscoveryURLs = []
+NoPruning = true
+NoPrefetch = false
+TxLookupLimit = 2350000
+TransactionHistory = 2350000
+StateScheme = "hash"
+DatabaseCache = 512
+DatabaseFreezer = ""
+TrieCleanCache = 256
+TrieDirtyCache = 256
+TrieTimeout = 3600000000000
+SnapshotCache = 64
+Preimages = false
+FilterLogCacheSize = 32
+EnablePreimageRecording = false
+RPCGasCap = 50000000
+RPCEVMTimeout = 5000000000
+RPCTxFeeCap = 0e+00
+
+[Eth.Miner]
+GasFloor = 0
+GasCeil = 30000000
+GasPrice = 10000000000
+Recommit = 999999999000000000
+NewPayloadTimeout = 2000000000
+
+[Eth.TxPool]
+Locals = []
+NoLocals = true
+Journal = "transactions.rlp"
+Rejournal = 3600000000000
+PriceLimit = 10000000000
+PriceBump = 10
+AccountSlots = 16
+GlobalSlots = 5120
+AccountQueue = 64
+GlobalQueue = 1024
+Lifetime = 3600000000000
+
+[Eth.BlobPool]
+Datadir = "blobpool"
+Datacap = 1
+PriceBump = 100
+
+[Eth.GPO]
+Blocks = 120
+Percentile = 60
+MaxHeaderHistory = 1024
+MaxBlockHistory = 1024
+MaxPrice = 500000000000
+IgnorePrice = 2
+
+[Node]
+DataDir = ""
+IPCPath = "geth.ipc"
+HTTPHost = ""
+HTTPModules = []
+WSHost = ""
+WSModules = []
+AllowUnprotectedTxs = true
+
+[Node.P2P]
+MaxPeers = 100
+NoDiscovery = true
+StaticNodes = [
+    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-0.p2p.testnet.immutable.com:30300",
+	"enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
+	"enode://eca30e8fddb285c5a388279bad8f5a52975ee16f198b527db9de7763994cdb150801d5ca3391cfd3716fdc8f55f18d12122178c7fecf03868bfdcf481311ccd7@partner-public-2.p2p.testnet.immutable.com:30300",
+]
+TrustedNodes = [
+    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-0.p2p.testnet.immutable.com:30300",
+	"enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
+	"enode://eca30e8fddb285c5a388279bad8f5a52975ee16f198b527db9de7763994cdb150801d5ca3391cfd3716fdc8f55f18d12122178c7fecf03868bfdcf481311ccd7@partner-public-2.p2p.testnet.immutable.com:30300",
+]
+ListenAddr = ""
+DiscAddr = ""
+EnableMsgEvents = false
+
+[Node.HTTPTimeouts]
+ReadTimeout = 0
+ReadHeaderTimeout = 0
+WriteTimeout = 0
+IdleTimeout = 0

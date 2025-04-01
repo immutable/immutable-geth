@@ -15,14 +15,20 @@ _exit() {
 }
 trap _exit EXIT
 
+env="$1"
+if [ -z "$env" ]; then
+      echo "env name (devnet, testnet, mainnet) must be specified as argument"
+      exit 1
+fi
+
 # Set the env var to enable long range sync
 export GETH_FLAG_IMMUTABLE_LONG_RANGE_SYNC="1"
 
 ./build/bin/geth immutable bootstrap local \
---env devnet \
+--env "$env" \
 --syncmode snap \
---gcmode full \
---config ./.github/scripts/dev.toml \
+--gcmode archive \
+--config "./.github/scripts/$env.toml" \
 --boots "0" \
 --rpcs "1" \
 --validators "0"
