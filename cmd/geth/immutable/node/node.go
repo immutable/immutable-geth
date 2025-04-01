@@ -49,9 +49,9 @@ type Options struct {
 
 // Config contains the configuration relevant for all nodes
 type Config struct {
-	Network                 settings.Network
-	ConfigFilepath          string
-	BlockListFilepath       string
+	Network           settings.Network
+	ConfigFilepath    string
+	BlockListFilepath string
 }
 
 // Node is a runnable geth node that is produced by the LocalBootstrapper.
