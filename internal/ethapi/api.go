@@ -1044,10 +1044,42 @@ func (diff *BlockOverrides) Apply(blockCtx *vm.BlockContext) {
 	}
 }
 
+// MakeHeader returns a new header object with the overridden
+// fields.
+// Note: MakeHeader ignores BlobBaseFee if set. That's because
+// header has no such field.
+func (o *BlockOverrides) MakeHeader(header *types.Header) *types.Header {
+	if o == nil {
+		return header
+	}
+	h := types.CopyHeader(header)
+	if o.Number != nil {
+		h.Number = o.Number.ToInt()
+	}
+	if o.Difficulty != nil {
+		h.Difficulty = o.Difficulty.ToInt()
+	}
+	if o.Time != nil {
+		h.Time = uint64(*o.Time)
+	}
+	if o.GasLimit != nil {
+		h.GasLimit = uint64(*o.GasLimit)
+	}
+	if o.Coinbase != nil {
+		h.Coinbase = *o.Coinbase
+	}
+	h.MixDigest = common.Hash{}
+	if o.BaseFee != nil {
+		h.BaseFee = o.BaseFee.ToInt()
+	}
+	return h
+}
+
 // ChainContextBackend provides methods required to implement ChainContext.
 type ChainContextBackend interface {
 	Engine() consensus.Engine
 	HeaderByNumber(context.Context, rpc.BlockNumber) (*types.Header, error)
+	ChainConfig() *params.ChainConfig
 }
 
 // ChainContext is an implementation of core.ChainContext. It's main use-case

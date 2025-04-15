@@ -193,3 +193,36 @@ func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *stat
 	_, _, _ = vmenv.Call(vm.AccountRef(msg.From), *msg.To, msg.Data, 30_000_000, common.U2560)
 	statedb.Finalise(true)
 }
+
+// MakeReceipt generates the receipt object for a transaction given its execution result.
+func MakeReceipt(evm *vm.EVM, result *ExecutionResult, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas uint64, root []byte) *types.Receipt {
+	// Create a new receipt for the transaction, storing the intermediate root and gas used
+	// by the tx.
+	receipt := &types.Receipt{Type: tx.Type(), PostState: root, CumulativeGasUsed: usedGas}
+	if result.Failed() {
+		receipt.Status = types.ReceiptStatusFailed
+	} else {
+		receipt.Status = types.ReceiptStatusSuccessful
+	}
+	receipt.TxHash = tx.Hash()
+	receipt.GasUsed = result.UsedGas
+
+	if tx.Type() == types.BlobTxType {
+		receipt.BlobGasUsed = uint64(len(tx.BlobHashes()) * params.BlobTxBlobGasPerBlob)
+		receipt.BlobGasPrice = evm.Context.BlobBaseFee
+	}
+
+	// If the transaction created a contract, store the creation address in the receipt.
+	if tx.To() == nil {
+		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
+	}
+
+	// Set the receipt logs and create the bloom filter.
+	receipt.Logs = statedb.GetLogs(tx.Hash(), blockNumber.Uint64(), blockHash)
+	// FIXME: CreateBloom has changed its implementation
+	receipt.Bloom = types.CreateBloom([]*types.Receipt{receipt})
+	receipt.BlockHash = blockHash
+	receipt.BlockNumber = blockNumber
+	receipt.TransactionIndex = uint(statedb.TxIndex())
+	return receipt
+}
