@@ -19,6 +19,7 @@ package node
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +64,12 @@ func newRelicMiddleware(nrApp *newrelic.Application, next http.Handler) http.Han
 		mb := int64(1024 * 1024)
 		body, bodyReader, err := limitedTeeRead(req.Body, mb)
 		if err != nil {
+			if errors.Is(err, errBodySizeExceedsLimit) {
+				log.Warn(err.Error())
+				http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+				return
+			}
+
 			log.WithError(err).Error("Failed to read request body")
 			// respond to the client with a 503 error.
 			// We want to respond here because we can't use the body in subsequent handlers anyway.
