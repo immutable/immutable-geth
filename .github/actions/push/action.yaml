@@ -78,4 +78,4 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache
         cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/immutable-geth:cache,mode=max
-        provenance: false
+        provenance: true
