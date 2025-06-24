@@ -10,6 +10,10 @@ jobs:
   push:
     name: Push Docker
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # pin@v4.2.2
@@ -23,6 +27,15 @@ jobs:
           echo TAGS="ghcr.io/${{ github.repository }}/immutable-geth:unstable-$BUILD_TIMESTAMP-git.$SHORT_SHA" >> $GITHUB_ENV
 
       - uses: ./.github/actions/push
+        id: push
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: ${{ env.TAGS }}
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        id: attest
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/immutable-geth
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: false
