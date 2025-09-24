@@ -67,14 +67,14 @@ AllowUnprotectedTxs = true
 MaxPeers = 100
 NoDiscovery = true
 StaticNodes = [
-    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-0.p2p.testnet.immutable.com:30300",
-	"enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
-	"enode://eca30e8fddb285c5a388279bad8f5a52975ee16f198b527db9de7763994cdb150801d5ca3391cfd3716fdc8f55f18d12122178c7fecf03868bfdcf481311ccd7@partner-public-2.p2p.testnet.immutable.com:30300",
+    "enode://8c99adb00fd67c2b8f47fb4cc21fd1d9da469385f24c38ea593fea0ba986b7faa070aeb5646af25922bc06f0e2435dca47dc42df10c1dc138f735bda3a9925fe@partner-public-0.p2p.testnet.immutable.com:30300",
+    "enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
+    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-2.p2p.testnet.immutable.com:30300",
 ]
 TrustedNodes = [
-    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-0.p2p.testnet.immutable.com:30300",
-	"enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
-	"enode://eca30e8fddb285c5a388279bad8f5a52975ee16f198b527db9de7763994cdb150801d5ca3391cfd3716fdc8f55f18d12122178c7fecf03868bfdcf481311ccd7@partner-public-2.p2p.testnet.immutable.com:30300",
+    "enode://8c99adb00fd67c2b8f47fb4cc21fd1d9da469385f24c38ea593fea0ba986b7faa070aeb5646af25922bc06f0e2435dca47dc42df10c1dc138f735bda3a9925fe@partner-public-0.p2p.testnet.immutable.com:30300",
+    "enode://7abec29f54c9e6bbf3c2cc124734d154e1cbf08c5890446a6438108581e89cef3932603e2412c299bb33892f5d08e87264f293e55703df2aace9e8e9c9958b06@partner-public-1.p2p.testnet.immutable.com:30300",
+    "enode://92d767213118c6c5986eff443f82b8d6b2db284b2cadadd309c96d3b49cc8ded5f2ca05712f5301f392e937dbdfff50812c09875fb54d066e7a2f7b8bbd0c3fb@partner-public-2.p2p.testnet.immutable.com:30300",
 ]
 ListenAddr = ""
 DiscAddr = ""
