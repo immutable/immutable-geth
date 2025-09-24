@@ -43,7 +43,7 @@ docker pull ghcr.io/immutable/go-ethereum/go-ethereum:latest
 
 ## Run
 
-If you wish to join the P2P network, you must follow [these](https://docs.axelar.dev/validator/external-chains/immutable) instructions.
+If you wish to join the P2P network, please follow the instructions [here](https://docs.immutable.com/learn/platform/nodes/).
 
 ### Hardware Requirements
 
