@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.0-beta.17]
+
+- Security fix for p2p networking layer (CVE-2026-22868)
+
 ## [v1.0.0-beta.16]
 
 - Return `413` status code instead of `500` when RPC request body exceeds size limit 
