@@ -15,6 +15,11 @@ inputs:
   build-args:
     required: false
     type: string
+  platforms:
+    required: false
+    type: string
+    default: "linux/amd64"
+    description: "Comma separated list of target platforms (e.g. linux/amd64,linux/arm64)"
 
 outputs:
   digest:
@@ -76,7 +81,7 @@ runs:
       uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # pin@v6.15.0
       with:
         context: .
-        platforms: linux/amd64
+        platforms: ${{ inputs.platforms }}
         file: ${{ inputs.dockerfile }}
         push: true
         build-args: ${{ inputs.build-args }}
