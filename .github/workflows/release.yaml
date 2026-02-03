@@ -24,7 +24,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: "ghcr.io/${{ github.repository }}/immutable-geth:latest,ghcr.io/${{ github.repository }}/immutable-geth:${{ env.TAG }}"
-      
+          platforms: linux/amd64,linux/arm64
+
       - name: Attest
         uses: actions/attest-build-provenance@v2
         id: attest
