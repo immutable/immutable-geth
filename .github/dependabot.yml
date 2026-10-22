@@ -1,0 +1,112 @@
+version: 2
+
+# To land every ecosystem's updates in a single weekly PR, uncomment this
+# block and the two `multi-ecosystem-group` / `patterns` lines marked
+# "single PR" in each update below.
+# multi-ecosystem-groups:
+#   all-updates:
+#     schedule:
+#       interval: weekly
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    # single PR:
+    # multi-ecosystem-group: all-updates
+    # patterns: ["*"]
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # Security updates: bundle related CVE fixes into one PR, as upstream does.
+      sec-golang-x:
+        applies-to: security-updates
+        patterns:
+          - "golang.org/x/*"
+      sec-google:
+        applies-to: security-updates
+        patterns:
+          - "google.golang.org/*"
+      # Version updates
+      golang-x:
+        applies-to: version-updates
+        patterns:
+          - "golang.org/x/*"
+      go-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+        exclude-patterns:
+          - "golang.org/x/*"
+    ignore:
+      # This is a go-ethereum fork. Major bumps of its dependencies are
+      # handled by hand when rebasing on upstream.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
+  # Builder and runtime images in Dockerfile and Dockerfile.alltools.
+  - package-ecosystem: docker
+    directory: /
+    # single PR:
+    # multi-ecosystem-group: all-updates
+    # patterns: ["*"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+    ignore:
+      # A new Go minor needs a go.mod and CI change in the same PR,
+      # so do those by hand. Patch releases still come through.
+      - dependency-name: golang
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+
+  # Workflows, plus the composite actions under .github/actions, which
+  # the default "/" directory does not scan.
+  - package-ecosystem: github-actions
+    # single PR:
+    # multi-ecosystem-group: all-updates
+    # patterns: ["*"]
+    directories:
+      - /
+      - /.github/actions/**/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Only dependency is tinyrpc, used by the clef python signer example.
+  - package-ecosystem: pip
+    directory: /cmd/clef
+    # single PR:
+    # multi-ecosystem-group: all-updates
+    # patterns: ["*"]
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: build
+      include: scope
