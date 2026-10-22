@@ -10,7 +10,7 @@ inputs:
   golangci-lint-version:
     description: Golangci-lint version to use
     required: false
-    default: v1.51.1
+    default: v2.15.0
   refresh-analysis-cache:
     description: Flag to control if golangci-lint analysis cache needs to be refreshed
     default: false
@@ -18,7 +18,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache golangci-lint
-      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # pin@v6.1.0
       id: cache-golangci-lint
       with:
         path: ~/go/bin/golangci-lint
@@ -27,11 +27,11 @@ runs:
     - name: Install golangci-lint
       if: steps.cache-golangci-lint.outputs.cache-hit != 'true'
       shell: bash
-      run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@${{ inputs.golangci-lint-version }}
+      run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ inputs.golangci-lint-version }}
 
     - name: Restore golangci-lint analysis cache
       if: ${{ inputs.refresh-analysis-cache != 'true' }}
-      uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # pin@v6.1.0
       with:
         path: ~/.cache/golangci-lint
         # This technique will make the cache key unique to the commit SHA,
@@ -42,7 +42,7 @@ runs:
 
     - name: Cache golangci-lint analysis cache
       if: ${{ inputs.refresh-analysis-cache == 'true' }}
-      uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # pin@v4.2.2
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # pin@v6.1.0
       with:
         path: ~/.cache/golangci-lint
         # This technique will make the cache key unique to the commit SHA,

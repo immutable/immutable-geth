@@ -27,7 +27,7 @@ func TestAllPeers_NonEmptyPeerset_NonZeroPeers(t *testing.T) {
 		peer := eth.NewPeer(1, p2pPeer, nil, nil)
 		err := testPeerSet.registerPeer(peer, nil)
 		if err != nil {
-			t.Fatalf(err.Error())
+			t.Fatal(err)
 		}
 	}
 

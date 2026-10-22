@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.0-beta.18]
+
+- Update `ca-certificates` to remove trust in compromised eMudhra intermediate CAs (runtime image `alpine:3.18.9` to `alpine:3.24.3`)
+- Build with Go 1.26 (was Go 1.21)
+- Remove the `/memsize/` page from the pprof server
+
 ## [v1.0.0-beta.17]
 
 - Security fix for p2p networking layer (CVE-2026-22868)
